@@ -1,0 +1,61 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <TargetFramework>netstandard2.1</TargetFramework>
+        <LangVersion>9.0</LangVersion>
+        <Nullable>enable</Nullable>
+        <!-- 碰撞宽相/窄相 Job 需要裸指针访问 Chunk 列（ChunkColumn<T>.UnsafePtr）。 -->
+        <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+        <RootNamespace>Ember.Collision</RootNamespace>
+        <AssemblyName>Ember.Collision</AssemblyName>
+        <EmberFrameworkDir Condition="'$(EmberFrameworkDir)' == ''">$(MSBuildThisFileDirectory)../Ember.Framework</EmberFrameworkDir>
+        <EmberRuntimeDll Condition="'$(EmberRuntimeDll)' == ''">$(MSBuildThisFileDirectory)../Ember.Package/Runtime/Ember.dll</EmberRuntimeDll>
+        <EmberCoreDll Condition="'$(EmberCoreDll)' == ''">$(MSBuildThisFileDirectory)../Ember.Core.Package/Runtime/Ember.Core.dll</EmberCoreDll>
+        <EmberGeneratorDll Condition="'$(EmberGeneratorDll)' == ''">$(MSBuildThisFileDirectory)../Ember.Package/RoslynAnalyzers/Ember.Generator.dll</EmberGeneratorDll>
+        <EmberPackageDir Condition="'$(EmberPackageDir)' == ''">$(MSBuildThisFileDirectory)../Ember.Collision.Package</EmberPackageDir>
+        <EmberDeployPackageBinaries Condition="'$(EmberDeployPackageBinaries)' == ''">false</EmberDeployPackageBinaries>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <Compile Remove="tests/**" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <Reference Include="Ember">
+            <HintPath>$(EmberRuntimeDll)</HintPath>
+        </Reference>
+        <!-- Ember.Core 组件库（LocalTransform / LocalToWorld / WorldBounds / SpatialTree ...）
+             以发布件引用；更新 Ember.Core 后需重新构建并部署到 Ember.Core.Package。 -->
+        <Reference Include="Ember.Core">
+            <HintPath>$(EmberCoreDll)</HintPath>
+        </Reference>
+        <Reference Include="UnityEngine.CoreModule">
+            <HintPath>$(EmberFrameworkDir)/libs/UnityEngine.CoreModule.dll</HintPath>
+            <Private>false</Private>
+        </Reference>
+        <Reference Include="Unity.Collections">
+            <HintPath>$(EmberFrameworkDir)/libs/Unity.Collections.dll</HintPath>
+            <Private>false</Private>
+        </Reference>
+        <Reference Include="Unity.Mathematics">
+            <HintPath>$(EmberFrameworkDir)/libs/Unity.Mathematics.dll</HintPath>
+            <Private>false</Private>
+        </Reference>
+        <!-- 显式 Burst 策略（EmberJobCompilationMode.Burst）要求编译期可解析 Unity.Burst 类型，
+             否则源生成器报 EMBER005。仅编译引用，运行时由 com.unity.burst 包提供。 -->
+        <Reference Include="Unity.Burst">
+            <HintPath>$(MSBuildThisFileDirectory)libs/Unity.Burst.dll</HintPath>
+            <Private>false</Private>
+        </Reference>
+        <Analyzer Include="$(EmberGeneratorDll)" />
+    </ItemGroup>
+
+    <Target Name="DeployPackageDlls" AfterTargets="Build"
+            Condition="'$(EmberDeployPackageBinaries)' == 'true'">
+        <MakeDir Directories="$(EmberPackageDir)/Runtime"/>
+        <Copy SourceFiles="$(TargetPath)"
+              DestinationFiles="$(EmberPackageDir)/Runtime/Ember.Collision.dll"
+              SkipUnchangedFiles="true" />
+    </Target>
+
+</Project>
