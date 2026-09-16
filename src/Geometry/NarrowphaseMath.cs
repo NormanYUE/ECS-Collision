@@ -7,20 +7,20 @@ namespace Ember.Collision
     {
         private const float Epsilon = 1e-6f;
 
-        private struct Sphere3
+        internal struct Sphere3
         {
             public float3 Center;
             public float Radius;
         }
 
-        private struct Capsule3
+        internal struct Capsule3
         {
             public float3 Start;
             public float3 End;
             public float Radius;
         }
 
-        private struct Box3
+        internal struct Box3
         {
             public float3 Center;
             public float3 AxisX;
@@ -29,7 +29,7 @@ namespace Ember.Collision
             public float3 Extents;
         }
 
-        private struct PlanarShape
+        internal struct PlanarShape
         {
             public Collider Collider;
             public BodyPose Pose;
@@ -38,20 +38,20 @@ namespace Ember.Collision
             public int VertexPoolLength;
         }
 
-        private struct Circle2
+        internal struct Circle2
         {
             public float2 Center;
             public float Radius;
         }
 
-        private struct Capsule2
+        internal struct Capsule2
         {
             public float2 Start;
             public float2 End;
             public float Radius;
         }
 
-        private struct Box2
+        internal struct Box2
         {
             public float2 Center;
             public float2 AxisU;
@@ -199,7 +199,7 @@ namespace Ember.Collision
             }
         }
 
-        private static bool IsValidPlanarShape(in PlanarShape shape)
+        internal static bool IsValidPlanarShape(in PlanarShape shape)
         {
             switch (shape.Collider.Type)
             {
@@ -223,13 +223,13 @@ namespace Ember.Collision
             }
         }
 
-        private static Circle2 BuildCircle2(in PlanarShape shape) => new()
+        internal static Circle2 BuildCircle2(in PlanarShape shape) => new()
         {
             Center = Center2(shape),
             Radius = math.abs(shape.Collider.Params.Radius * shape.Pose.Scale),
         };
 
-        private static Capsule2 BuildCapsule2(in PlanarShape shape)
+        internal static Capsule2 BuildCapsule2(in PlanarShape shape)
         {
             GetPlaneAxes(shape, out float2 axisU, out float2 axisV);
             float2 center = Center2(shape);
@@ -243,7 +243,7 @@ namespace Ember.Collision
             };
         }
 
-        private static Box2 BuildBox2(in PlanarShape shape)
+        internal static Box2 BuildBox2(in PlanarShape shape)
         {
             GetPlaneAxes(shape, out float2 axisU, out float2 axisV);
             return new Box2
@@ -255,10 +255,10 @@ namespace Ember.Collision
             };
         }
 
-        private static float2 Center2(in PlanarShape shape) =>
+        internal static float2 Center2(in PlanarShape shape) =>
             Project(shape.Pose.TransformPoint(shape.Collider.Params.Center), shape.Dimension);
 
-        private static void GetPlaneAxes(in PlanarShape shape, out float2 axisU, out float2 axisV)
+        internal static void GetPlaneAxes(in PlanarShape shape, out float2 axisU, out float2 axisV)
         {
             float3 localV = shape.Dimension == CollisionDimension.XZ
                 ? new float3(0f, 0f, 1f)
@@ -444,13 +444,13 @@ namespace Ember.Collision
             + box.AxisU * (math.dot(direction, box.AxisU) >= 0f ? box.Extents.x : -box.Extents.x)
             + box.AxisV * (math.dot(direction, box.AxisV) >= 0f ? box.Extents.y : -box.Extents.y);
 
-        private static float2 ToLocal2(in Box2 box, float2 point)
+        internal static float2 ToLocal2(in Box2 box, float2 point)
         {
             float2 delta = point - box.Center;
             return new float2(math.dot(delta, box.AxisU), math.dot(delta, box.AxisV));
         }
 
-        private static float2 FromLocal2(in Box2 box, float2 point) =>
+        internal static float2 FromLocal2(in Box2 box, float2 point) =>
             box.Center + box.AxisU * point.x + box.AxisV * point.y;
 
         private static void ClosestFace2(
@@ -804,10 +804,10 @@ namespace Ember.Collision
             return true;
         }
 
-        private static float PointAabbDistanceSq2D(float2 point, float2 extents) =>
+        internal static float PointAabbDistanceSq2D(float2 point, float2 extents) =>
             math.lengthsq(point - math.clamp(point, -extents, extents));
 
-        private static float2 ClosestPointOnSegment2D(float2 point, float2 start, float2 end)
+        internal static float2 ClosestPointOnSegment2D(float2 point, float2 start, float2 end)
         {
             float2 direction = end - start;
             float lengthSq = math.lengthsq(direction);
@@ -816,7 +816,7 @@ namespace Ember.Collision
             return start + direction * t;
         }
 
-        private static void ClosestPointsOnSegments2D(
+        internal static void ClosestPointsOnSegments2D(
             float2 startA,
             float2 endA,
             float2 startB,
@@ -892,21 +892,21 @@ namespace Ember.Collision
             return NormalizeOr2(perpendicular, new float2(1f, 0f));
         }
 
-        private static float2 NormalizeOr2(float2 value, float2 fallback)
+        internal static float2 NormalizeOr2(float2 value, float2 fallback)
         {
             float lengthSq = math.lengthsq(value);
             return lengthSq > Epsilon * Epsilon ? value * math.rsqrt(lengthSq) : fallback;
         }
 
-        private static float2 Project(float3 point, CollisionDimension dimension) =>
+        internal static float2 Project(float3 point, CollisionDimension dimension) =>
             dimension == CollisionDimension.XZ ? new float2(point.x, point.z) : new float2(point.x, point.y);
 
-        private static float3 LiftPoint(float2 point, CollisionDimension dimension, float inactiveCoordinate) =>
+        internal static float3 LiftPoint(float2 point, CollisionDimension dimension, float inactiveCoordinate) =>
             dimension == CollisionDimension.XZ
                 ? new float3(point.x, inactiveCoordinate, point.y)
                 : new float3(point.x, point.y, inactiveCoordinate);
 
-        private static float3 LiftDirection(float2 direction, CollisionDimension dimension) =>
+        internal static float3 LiftDirection(float2 direction, CollisionDimension dimension) =>
             dimension == CollisionDimension.XZ
                 ? new float3(direction.x, 0f, direction.y)
                 : new float3(direction.x, direction.y, 0f);
@@ -967,13 +967,13 @@ namespace Ember.Collision
             }
         }
 
-        private static Sphere3 BuildSphere(in Collider collider, in BodyPose pose) => new()
+        internal static Sphere3 BuildSphere(in Collider collider, in BodyPose pose) => new()
         {
             Center = pose.TransformPoint(collider.Params.Center),
             Radius = math.abs(collider.Params.Radius * pose.Scale),
         };
 
-        private static Capsule3 BuildCapsule(in Collider collider, in BodyPose pose)
+        internal static Capsule3 BuildCapsule(in Collider collider, in BodyPose pose)
         {
             float3 center = pose.TransformPoint(collider.Params.Center);
             float3 axis = NormalizeOr(pose.TransformDirection(collider.Params.CapsuleAxis), new float3(0f, 1f, 0f));
@@ -986,7 +986,7 @@ namespace Ember.Collision
             };
         }
 
-        private static Box3 BuildBox(in Collider collider, in BodyPose pose) => new()
+        internal static Box3 BuildBox(in Collider collider, in BodyPose pose) => new()
         {
             Center = pose.TransformPoint(collider.Params.Center),
             AxisX = NormalizeOr(pose.TransformDirection(new float3(1f, 0f, 0f)), new float3(1f, 0f, 0f)),
@@ -1213,7 +1213,7 @@ namespace Ember.Collision
             }
         }
 
-        private static float3 ToLocal(in Box3 box, float3 point)
+        internal static float3 ToLocal(in Box3 box, float3 point)
         {
             float3 delta = point - box.Center;
             return new float3(
@@ -1222,7 +1222,7 @@ namespace Ember.Collision
                 math.dot(delta, box.AxisZ));
         }
 
-        private static float3 FromLocal(in Box3 box, float3 point) =>
+        internal static float3 FromLocal(in Box3 box, float3 point) =>
             box.Center + box.AxisX * point.x + box.AxisY * point.y + box.AxisZ * point.z;
 
         private static void ClosestFace(
@@ -1259,7 +1259,7 @@ namespace Ember.Collision
             facePoint = FromLocal(box, localFace);
         }
 
-        private static float3 ClosestPointOnSegment(float3 point, float3 start, float3 end)
+        internal static float3 ClosestPointOnSegment(float3 point, float3 start, float3 end)
         {
             float3 direction = end - start;
             float lengthSq = math.lengthsq(direction);
@@ -1268,7 +1268,7 @@ namespace Ember.Collision
             return start + direction * t;
         }
 
-        private static void ClosestPointsOnSegments(
+        internal static void ClosestPointsOnSegments(
             float3 startA,
             float3 endA,
             float3 startB,
@@ -1411,10 +1411,10 @@ namespace Ember.Collision
             return enter <= exit;
         }
 
-        private static float PointAabbDistanceSq(float3 point, float3 extents) =>
+        internal static float PointAabbDistanceSq(float3 point, float3 extents) =>
             math.lengthsq(point - math.clamp(point, -extents, extents));
 
-        private static float3 NormalizeOr(float3 value, float3 fallback)
+        internal static float3 NormalizeOr(float3 value, float3 fallback)
         {
             float lengthSq = math.lengthsq(value);
             return lengthSq > Epsilon * Epsilon ? value * math.rsqrt(lengthSq) : fallback;
