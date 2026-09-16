@@ -61,6 +61,71 @@ namespace Ember.Collision
         public readonly int OverflowCount => m_World.GetComponent<CollisionWorld>(m_Owner).OverflowCount;
 
         // ---------------------------------------------------------------------
+        // 公开 body 快照（N2，供运行时烘焙等消费方读取）
+        // ---------------------------------------------------------------------
+
+        /// <summary>
+        /// 当帧稠密 body 位姿的只读视图。<b>仅在 <see cref="IsQueryReady"/> 后有效</b>；
+        /// 只读，不可写回、不可缓存跨帧（下一帧重填 / 扩容后视图即失效）。
+        /// 零分配 —— 直接包装 World 托管 buffer 的裸内存。
+        /// </summary>
+        public readonly NativeArray<BodyPose> BodyPoses
+        {
+            get
+            {
+                RequireQueryReady(nameof(BodyPoses));
+                return NativeView<BodyPose>(State.BodyPoses, State.BodyCount);
+            }
+        }
+
+        /// <summary>当帧稠密 body 碰撞体的只读视图。有效性约束同 <see cref="BodyPoses"/>。</summary>
+        public readonly NativeArray<Collider> BodyColliders
+        {
+            get
+            {
+                RequireQueryReady(nameof(BodyColliders));
+                return NativeView<Collider>(State.BodyColliders, State.BodyCount);
+            }
+        }
+
+        /// <summary>当帧稠密 body 过滤层的只读视图。有效性约束同 <see cref="BodyPoses"/>。</summary>
+        public readonly NativeArray<CollisionFilter> BodyFilters
+        {
+            get
+            {
+                RequireQueryReady(nameof(BodyFilters));
+                return NativeView<CollisionFilter>(State.BodyFilters, State.BodyCount);
+            }
+        }
+
+        /// <summary>当帧稠密 body 标志（含 Static 位）的只读视图。有效性约束同 <see cref="BodyPoses"/>。</summary>
+        public readonly NativeArray<byte> BodyFlags
+        {
+            get
+            {
+                RequireQueryReady(nameof(BodyFlags));
+                return NativeView<byte>(State.BodyFlags, State.BodyCount);
+            }
+        }
+
+        /// <summary>凸形状顶点池的只读视图（Polygon2D 顶点存储，长度 <see cref="VertexPoolCount"/>）。有效性约束同 <see cref="BodyPoses"/>。</summary>
+        public readonly NativeArray<float3> VertexPool
+        {
+            get
+            {
+                RequireQueryReady(nameof(VertexPool));
+                return NativeView<float3>(State.Vertices, State.VertexPoolCount);
+            }
+        }
+
+        private readonly void RequireQueryReady(string accessorName)
+        {
+            if (State.QueryReady == 0)
+                throw new System.InvalidOperationException(
+                    $"CollisionWorldView.{accessorName}: body snapshot is only valid after the broadphase has published (IsQueryReady). Read-only; do not cache across frames.");
+        }
+
+        // ---------------------------------------------------------------------
         // 初始化与扩容
         // ---------------------------------------------------------------------
 
@@ -187,8 +252,7 @@ namespace Ember.Collision
             int target = 4;
             while (target < length) target <<= 1;
 
-            for (int i = current; i < target; i++)
-                m_World.AddBufferElement<T>(handle, default);
+            m_World.ResizeBuffer<T>(handle, target);
         }
 
         /// <summary>
