@@ -137,47 +137,51 @@ namespace Ember.Collision
         // 初始化与扩容
         // ---------------------------------------------------------------------
 
-        /// <summary>首次使用时创建全部 scratch buffer（重复调用为空操作）。</summary>
+        /// <summary>
+        /// 首次使用时创建全部 scratch buffer（重复调用为空操作）。
+        /// 一律用 <c>CreateSizedBuffer</c> 而不是 <c>CreateBuffer</c>：后者的逻辑长度是 0，
+        /// 建出来必须再 ResizeBuffer 才能按下标用；本类的访问器是按长度取指针的，漏一次就退化成空指针。
+        /// </summary>
         internal void EnsureInitialized()
         {
             ref var state = ref MutableState;
             if (state.IsInitialized) return;
 
-            state.ChunkInfos = m_World.CreateBuffer<ChunkInfo>(8);
-            state.ChunkStaticFlags = m_World.CreateBuffer<byte>(8);
-            state.BodyEntities = m_World.CreateBuffer<Entity>(16);
-            state.BodyBounds = m_World.CreateBuffer<Aabb>(16);
-            state.BodyPoses = m_World.CreateBuffer<BodyPose>(16);
-            state.BodyColliders = m_World.CreateBuffer<Collider>(16);
-            state.BodyFilters = m_World.CreateBuffer<CollisionFilter>(16);
-            state.BodyFlags = m_World.CreateBuffer<byte>(16);
-            state.BodyContactFlags = m_World.CreateBuffer<byte>(16);
-            state.BodyChunks = m_World.CreateBuffer<int>(16);
-            state.MortonKeys = m_World.CreateBuffer<uint>(16);
-            state.MortonKeysScratch = m_World.CreateBuffer<uint>(16);
-            state.BodyOrder = m_World.CreateBuffer<int>(16);
-            state.BodyOrderScratch = m_World.CreateBuffer<int>(16);
-            state.PairCounts = m_World.CreateBuffer<int>(16);
-            state.PairOffsets = m_World.CreateBuffer<int>(17);
-            state.BucketHistogram = m_World.CreateBuffer<int>(256);
-            state.BucketOffsets = m_World.CreateBuffer<int>(256);
-            state.BucketTotals = m_World.CreateBuffer<int>(256);
-            state.BlockBounds = m_World.CreateBuffer<Aabb>(4);
-            state.BvhNodes = m_World.CreateBuffer<BvhNode>(32);
-            state.TraversalStack = m_World.CreateBuffer<int>(64);
-            state.DiagnosticFlags = m_World.CreateBuffer<int>(CollisionWorld.DiagnosticSlotCount);
-            state.PairScanBlocks = m_World.CreateBuffer<int>(4);
-            state.ContactScanBlocks = m_World.CreateBuffer<int>(4);
-            state.CandidatePairs = m_World.CreateBuffer<CandidatePair>(16);
-            state.ContactCounts = m_World.CreateBuffer<int>(16);
-            state.ContactOffsets = m_World.CreateBuffer<int>(17);
-            state.Contacts = m_World.CreateBuffer<ContactManifold>(16);
-            state.PreviousContactPairs = m_World.CreateBuffer<ContactPairRecord>(16);
-            state.CurrentContactPairs = m_World.CreateBuffer<ContactPairRecord>(16);
-            state.ContactPairScratch = m_World.CreateBuffer<ContactPairRecord>(16);
-            state.ContactEvents = m_World.CreateBuffer<ContactEvent>(32);
-            state.Vertices = m_World.CreateBuffer<float3>(64);
-            state.Diagnostics = m_World.CreateBuffer<int>(CollisionWorld.DiagnosticSlotCount);
+            state.ChunkInfos = m_World.CreateSizedBuffer<ChunkInfo>(8);
+            state.ChunkStaticFlags = m_World.CreateSizedBuffer<byte>(8);
+            state.BodyEntities = m_World.CreateSizedBuffer<Entity>(16);
+            state.BodyBounds = m_World.CreateSizedBuffer<Aabb>(16);
+            state.BodyPoses = m_World.CreateSizedBuffer<BodyPose>(16);
+            state.BodyColliders = m_World.CreateSizedBuffer<Collider>(16);
+            state.BodyFilters = m_World.CreateSizedBuffer<CollisionFilter>(16);
+            state.BodyFlags = m_World.CreateSizedBuffer<byte>(16);
+            state.BodyContactFlags = m_World.CreateSizedBuffer<byte>(16);
+            state.BodyChunks = m_World.CreateSizedBuffer<int>(16);
+            state.MortonKeys = m_World.CreateSizedBuffer<uint>(16);
+            state.MortonKeysScratch = m_World.CreateSizedBuffer<uint>(16);
+            state.BodyOrder = m_World.CreateSizedBuffer<int>(16);
+            state.BodyOrderScratch = m_World.CreateSizedBuffer<int>(16);
+            state.PairCounts = m_World.CreateSizedBuffer<int>(16);
+            state.PairOffsets = m_World.CreateSizedBuffer<int>(17);
+            state.BucketHistogram = m_World.CreateSizedBuffer<int>(256);
+            state.BucketOffsets = m_World.CreateSizedBuffer<int>(256);
+            state.BucketTotals = m_World.CreateSizedBuffer<int>(256);
+            state.BlockBounds = m_World.CreateSizedBuffer<Aabb>(4);
+            state.BvhNodes = m_World.CreateSizedBuffer<BvhNode>(32);
+            state.TraversalStack = m_World.CreateSizedBuffer<int>(64);
+            state.DiagnosticFlags = m_World.CreateSizedBuffer<int>(CollisionWorld.DiagnosticSlotCount);
+            state.PairScanBlocks = m_World.CreateSizedBuffer<int>(4);
+            state.ContactScanBlocks = m_World.CreateSizedBuffer<int>(4);
+            state.CandidatePairs = m_World.CreateSizedBuffer<CandidatePair>(16);
+            state.ContactCounts = m_World.CreateSizedBuffer<int>(16);
+            state.ContactOffsets = m_World.CreateSizedBuffer<int>(17);
+            state.Contacts = m_World.CreateSizedBuffer<ContactManifold>(16);
+            state.PreviousContactPairs = m_World.CreateSizedBuffer<ContactPairRecord>(16);
+            state.CurrentContactPairs = m_World.CreateSizedBuffer<ContactPairRecord>(16);
+            state.ContactPairScratch = m_World.CreateSizedBuffer<ContactPairRecord>(16);
+            state.ContactEvents = m_World.CreateSizedBuffer<ContactEvent>(32);
+            state.Vertices = m_World.CreateSizedBuffer<float3>(64);
+            state.Diagnostics = m_World.CreateSizedBuffer<int>(CollisionWorld.DiagnosticSlotCount);
         }
 
         /// <summary>
@@ -235,6 +239,10 @@ namespace Ember.Collision
             Grow<ContactPairRecord>(ref state.ContactPairScratch, contactCapacity);
             Grow<ContactEvent>(ref state.ContactEvents, contactCapacity * 2);
             Grow<int>(ref state.Diagnostics, CollisionWorld.DiagnosticSlotCount);
+
+            // DiagnosticFlags 也必须显式设长度：CreateBuffer(capacity) 只设容量，
+            // 逻辑长度是 0，不 Growth 就永远是 0（本文件里唯一一个此前漏掉的）。
+            Grow<int>(ref state.DiagnosticFlags, CollisionWorld.DiagnosticSlotCount);
 
             // 全部扩容完成后才刷新容量字段，避免中途状态被误用。
             state.BodyCapacity = m_World.GetBufferLength<Entity>(state.BodyEntities);
