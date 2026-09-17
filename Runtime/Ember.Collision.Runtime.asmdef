@@ -1,0 +1,22 @@
+{
+    "name": "Ember.Collision.Runtime",
+    "rootNamespace": "Ember.Collision",
+    "references": [
+        "Ember.Runtime",
+        "Ember.Core.Runtime",
+        "Unity.Collections",
+        "Unity.Mathematics",
+        "Unity.Burst"
+    ],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": true,
+    "overrideReferences": true,
+    "precompiledReferences": [
+        "Ember.dll"
+    ],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}
