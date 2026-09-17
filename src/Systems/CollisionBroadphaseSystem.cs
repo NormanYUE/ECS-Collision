@@ -38,25 +38,33 @@ namespace Ember.Collision
         /// <summary>首帧接触流形容量提示；P2 计数后会按精确数量扩容。</summary>
         private const int InitialContactCapacity = MinPredictedPairs;
 
-        private readonly EntityQuery m_ColliderQuery = new(
-            new ComponentMask()
-                .With<Collider>()
-                .With<CollisionBody>()
-                .With<CollisionFilter>()
-                .With<CollisionState>()
-                .With<LocalToWorld>()
-                .With<BoundingVolume>(),
-            ComponentMask.Empty,
-            new ComponentMask().With<Prefab>().With<Disabled>());
+        // 查询在 OnCreate 构造，不用字段初始化器：系统由 SystemTicker.Register 立即构造，
+        // 早于 ECSManager.Start()、早于 World 构造，而 ComponentMask.With<T>() 会当场读组件注册表。
+        private EntityQuery m_ColliderQuery;
+        private EntityQuery m_StaticChunkQuery;
 
         /// <summary>带 Static 标签的 Chunk 集合（Tag 是 Archetype 级，故只需 Chunk 级归属判定）。
         /// 复用同一个 HashSet 并在每帧 Clear，稳态零 GC。</summary>
         private readonly HashSet<Chunk> m_StaticChunks = new();
 
-        private readonly EntityQuery m_StaticChunkQuery = new(
-            new ComponentMask().With<Collider>().With<Static>(),
-            ComponentMask.Empty,
-            new ComponentMask().With<Prefab>());
+        public override void OnCreate()
+        {
+            m_ColliderQuery = new EntityQuery(
+                new ComponentMask()
+                    .With<Collider>()
+                    .With<CollisionBody>()
+                    .With<CollisionFilter>()
+                    .With<CollisionState>()
+                    .With<LocalToWorld>()
+                    .With<BoundingVolume>(),
+                ComponentMask.Empty,
+                new ComponentMask().With<Prefab>().With<Disabled>());
+
+            m_StaticChunkQuery = new EntityQuery(
+                new ComponentMask().With<Collider>().With<Static>(),
+                ComponentMask.Empty,
+                new ComponentMask().With<Prefab>());
+        }
 
         private Entity m_Owner;
         private CollisionWorldView m_View;

@@ -24,25 +24,35 @@ namespace Ember.Collision
     /// </summary>
     public sealed class CollisionSetupSystem : SystemBase
     {
-        private readonly EntityQuery m_MissingBody = new(
-            new ComponentMask().With<Collider>(),
-            ComponentMask.Empty,
-            new ComponentMask().With<CollisionBody>().With<Prefab>());
+        // 查询在 OnCreate 构造，不用字段初始化器：系统由 SystemTicker.Register 立即构造，
+        // 早于 ECSManager.Start()、早于 World 构造，而 ComponentMask.With<T>() 会当场读组件注册表。
+        private EntityQuery m_MissingBody;
+        private EntityQuery m_MissingFilter;
+        private EntityQuery m_MissingState;
+        private EntityQuery m_MissingVolume;
 
-        private readonly EntityQuery m_MissingFilter = new(
-            new ComponentMask().With<Collider>(),
-            ComponentMask.Empty,
-            new ComponentMask().With<CollisionFilter>().With<Prefab>());
+        public override void OnCreate()
+        {
+            m_MissingBody = new EntityQuery(
+                new ComponentMask().With<Collider>(),
+                ComponentMask.Empty,
+                new ComponentMask().With<CollisionBody>().With<Prefab>());
 
-        private readonly EntityQuery m_MissingState = new(
-            new ComponentMask().With<Collider>(),
-            ComponentMask.Empty,
-            new ComponentMask().With<CollisionState>().With<Prefab>());
+            m_MissingFilter = new EntityQuery(
+                new ComponentMask().With<Collider>(),
+                ComponentMask.Empty,
+                new ComponentMask().With<CollisionFilter>().With<Prefab>());
 
-        private readonly EntityQuery m_MissingVolume = new(
-            new ComponentMask().With<Collider>().With<LocalToWorld>(),
-            ComponentMask.Empty,
-            new ComponentMask().With<BoundingVolume>().With<Prefab>());
+            m_MissingState = new EntityQuery(
+                new ComponentMask().With<Collider>(),
+                ComponentMask.Empty,
+                new ComponentMask().With<CollisionState>().With<Prefab>());
+
+            m_MissingVolume = new EntityQuery(
+                new ComponentMask().With<Collider>().With<LocalToWorld>(),
+                ComponentMask.Empty,
+                new ComponentMask().With<BoundingVolume>().With<Prefab>());
+        }
 
         protected override void DeclareAccess(AccessBuilder access) => access
             .Read<Collider>()

@@ -13,13 +13,20 @@ namespace Ember.Collision
     /// </summary>
     public sealed class CollisionNarrowphaseSystem : SystemBase
     {
-        private readonly EntityQuery m_DisabledStateQuery = new(
-            new ComponentMask().With<Collider>().With<CollisionState>().With<Disabled>(),
-            ComponentMask.Empty,
-            new ComponentMask().With<Prefab>());
+        // 查询在 OnCreate 构造，不用字段初始化器：系统由 SystemTicker.Register 立即构造，
+        // 早于 ECSManager.Start()、早于 World 构造，而 ComponentMask.With<T>() 会当场读组件注册表。
+        private EntityQuery m_DisabledStateQuery;
 
         /// <summary>最近一帧发布的接触流形数，便于诊断和宿主侧测试。</summary>
         public int LastContactCount { get; private set; }
+
+        public override void OnCreate()
+        {
+            m_DisabledStateQuery = new EntityQuery(
+                new ComponentMask().With<Collider>().With<CollisionState>().With<Disabled>(),
+                ComponentMask.Empty,
+                new ComponentMask().With<Prefab>());
+        }
 
         protected override void DeclareAccess(AccessBuilder access) => access
             .Read<CollisionConfig>()
