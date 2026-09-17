@@ -22,8 +22,8 @@
         <Reference Include="Ember">
             <HintPath>$(EmberRuntimeDll)</HintPath>
         </Reference>
-        <!-- Ember.Core 改为源码工程引用：本模块已改源码包发布，Ember.Core.Package 不再产出 DLL，
-             再引包库路径就断了。源码形态下 Unity 侧同样是源码编译在一起，语义一致。 -->
+        <!-- Ember.Core 用源码工程引用：两个模块都在同一套源码里，Unity 侧同样是源码
+             编译在一起。不要退回引某个包库的 DLL —— 派生模块已经没有独立包库了。 -->
         <ProjectReference Include="..\Ember.Core\Ember.Core.csproj" />
         <Reference Include="UnityEngine.CoreModule">
             <HintPath>$(EmberFrameworkDir)/libs/UnityEngine.CoreModule.dll</HintPath>
