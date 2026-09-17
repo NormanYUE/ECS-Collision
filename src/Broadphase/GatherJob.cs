@@ -21,10 +21,10 @@ namespace Ember.Collision
     [BurstCompile(OptimizeFor = OptimizeFor.Performance)]
     public struct GatherJob : IJobParallelFor
     {
-        [ReadOnly] public NativeArray<ChunkInfo> ChunkInfos;
+        [NativeDisableUnsafePtrRestriction] public long ChunkInfosPtr;
 
         /// <summary>逐 Chunk 静态标志（Tag 为 Archetype 级，故每 Chunk 一字节即可）。</summary>
-        [ReadOnly] public NativeArray<byte> ChunkStaticFlags;
+        [NativeDisableUnsafePtrRestriction] public long ChunkStaticFlagsPtr;
 
         /// <summary>维度模式（决定无效轴的包围盒撑开）。</summary>
         public CollisionDimension Dimension;
@@ -35,16 +35,25 @@ namespace Ember.Collision
         /// <summary>凸形状顶点池长度。</summary>
         public int VertexPoolLength;
 
-        public NativeArray<Entity> BodyEntities;
-        public NativeArray<Aabb> BodyBounds;
-        public NativeArray<BodyPose> BodyPoses;
-        public NativeArray<Collider> BodyColliders;
-        public NativeArray<CollisionFilter> BodyFilters;
-        public NativeArray<byte> BodyFlags;
-        public NativeArray<int> BodyChunks;
+        [NativeDisableUnsafePtrRestriction] public long BodyEntitiesPtr;
+        [NativeDisableUnsafePtrRestriction] public long BodyBoundsPtr;
+        [NativeDisableUnsafePtrRestriction] public long BodyPosesPtr;
+        [NativeDisableUnsafePtrRestriction] public long BodyCollidersPtr;
+        [NativeDisableUnsafePtrRestriction] public long BodyFiltersPtr;
+        [NativeDisableUnsafePtrRestriction] public long BodyFlagsPtr;
+        [NativeDisableUnsafePtrRestriction] public long BodyChunksPtr;
 
-        public void Execute(int chunkIndex)
+        public unsafe void Execute(int chunkIndex)
         {
+            var ChunkInfos = (ChunkInfo*)ChunkInfosPtr;
+            var ChunkStaticFlags = (byte*)ChunkStaticFlagsPtr;
+            var BodyEntities = (Entity*)BodyEntitiesPtr;
+            var BodyBounds = (Aabb*)BodyBoundsPtr;
+            var BodyPoses = (BodyPose*)BodyPosesPtr;
+            var BodyColliders = (Collider*)BodyCollidersPtr;
+            var BodyFilters = (CollisionFilter*)BodyFiltersPtr;
+            var BodyFlags = (byte*)BodyFlagsPtr;
+            var BodyChunks = (int*)BodyChunksPtr;
             unsafe
             {
                 ChunkInfo info = ChunkInfos[chunkIndex];

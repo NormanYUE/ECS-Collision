@@ -1,6 +1,7 @@
 using Unity.Burst;
 using Unity.Collections;
 using Unity.Jobs;
+using Unity.Collections.LowLevel.Unsafe;
 
 namespace Ember.Collision
 {
@@ -8,10 +9,11 @@ namespace Ember.Collision
     [BurstCompile(OptimizeFor = OptimizeFor.Performance)]
     public struct ContactFlagClearJob : IJobParallelFor
     {
-        public NativeArray<byte> BodyContactFlags;
+        [NativeDisableUnsafePtrRestriction] public long BodyContactFlagsPtr;
 
-        public void Execute(int bodyIndex)
+        public unsafe void Execute(int bodyIndex)
         {
+            var BodyContactFlags = (byte*)BodyContactFlagsPtr;
             BodyContactFlags[bodyIndex] = 0;
         }
     }

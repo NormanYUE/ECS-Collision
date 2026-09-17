@@ -61,28 +61,32 @@ namespace Ember.Collision
         /// 调用方不得跨结构变更持有该视图：<c>NativeArray</c> 指向 World 托管 buffer，
         /// 任何 buffer 扩容都会搬移内存。请在当帧内消费完。
         /// </summary>
-        public static bool TryGetContacts(this World world, out NativeArray<ContactManifold> contacts)
+        public static bool TryGetContacts(this World world, out long contacts, out int count)
         {
-            contacts = default;
+            contacts = 0L;
+            count = 0;
             if (!world.TryGetCollisionWorld(out CollisionWorldView view)) return false;
-            int count = view.ContactCount;
-            if (count <= 0) return false;
-            NativeArray<ContactManifold> array = view.ContactArray;
-            if (!array.IsCreated || array.Length < count) return false;
-            contacts = array.GetSubArray(0, count);
+            int available = view.ContactCount;
+            if (available <= 0) return false;
+            long ptr = view.ContactPtr;
+            if (ptr == 0L || view.ContactCapacity < available) return false;
+            contacts = ptr;
+            count = available;
             return true;
         }
 
         /// <summary>读取本帧 pair 接触事件；视图仅在当前帧内有效。</summary>
-        public static bool TryGetContactEvents(this World world, out NativeArray<ContactEvent> events)
+        public static bool TryGetContactEvents(this World world, out long events, out int count)
         {
-            events = default;
+            events = 0L;
+            count = 0;
             if (!world.TryGetCollisionWorld(out CollisionWorldView view)) return false;
-            int count = view.ContactEventCount;
-            if (count <= 0) return false;
-            NativeArray<ContactEvent> array = view.ContactEventArray;
-            if (!array.IsCreated || array.Length < count) return false;
-            events = array.GetSubArray(0, count);
+            int available = view.ContactEventCount;
+            if (available <= 0) return false;
+            long ptr = view.ContactEventPtr;
+            if (ptr == 0L) return false;
+            events = ptr;
+            count = available;
             return true;
         }
 

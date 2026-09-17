@@ -9,15 +9,17 @@ namespace Ember.Collision
     [BurstCompile(OptimizeFor = OptimizeFor.Performance)]
     public unsafe struct ContactPairSortJob : IJob
     {
-        public NativeArray<ContactPairRecord> Records;
-        public NativeArray<ContactPairRecord> Scratch;
+        [NativeDisableUnsafePtrRestriction] public long RecordsPtr;
+        [NativeDisableUnsafePtrRestriction] public long ScratchPtr;
         public int Count;
 
-        public void Execute()
+        public unsafe void Execute()
         {
+            var Records = (ContactPairRecord*)RecordsPtr;
+            var Scratch = (ContactPairRecord*)ScratchPtr;
             ContactEventMath.Sort(
-                (ContactPairRecord*)Records.GetUnsafePtr(),
-                (ContactPairRecord*)Scratch.GetUnsafePtr(),
+                (ContactPairRecord*)Records,
+                (ContactPairRecord*)Scratch,
                 Count);
         }
     }

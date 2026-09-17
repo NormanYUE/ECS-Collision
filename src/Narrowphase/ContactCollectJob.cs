@@ -14,38 +14,50 @@ namespace Ember.Collision
     [BurstCompile(OptimizeFor = OptimizeFor.Performance)]
     public unsafe struct ContactCollectJob : IJobParallelFor
     {
-        [ReadOnly] public NativeArray<CandidatePair> Pairs;
+        [NativeDisableUnsafePtrRestriction] public long PairsPtr;
 
-        [ReadOnly] public NativeArray<Entity> BodyEntities;
+        [NativeDisableUnsafePtrRestriction] public long BodyEntitiesPtr;
 
-        [ReadOnly] public NativeArray<BodyPose> BodyPoses;
+        [NativeDisableUnsafePtrRestriction] public long BodyPosesPtr;
 
-        [ReadOnly] public NativeArray<Collider> BodyColliders;
+        [NativeDisableUnsafePtrRestriction] public long BodyCollidersPtr;
 
-        [ReadOnly] public NativeArray<CollisionFilter> BodyFilters;
+        [NativeDisableUnsafePtrRestriction] public long BodyFiltersPtr;
 
-        [ReadOnly] public NativeArray<byte> BodyFlags;
+        [NativeDisableUnsafePtrRestriction] public long BodyFlagsPtr;
 
-        [ReadOnly] public NativeArray<float3> Vertices;
+        [NativeDisableUnsafePtrRestriction] public long VerticesPtr;
 
-        [ReadOnly] public NativeArray<int> ContactCounts;
+        [NativeDisableUnsafePtrRestriction] public long ContactCountsPtr;
 
-        [ReadOnly] public NativeArray<int> ContactOffsets;
+        [NativeDisableUnsafePtrRestriction] public long ContactOffsetsPtr;
 
-        [NativeDisableParallelForRestriction] public NativeArray<ContactManifold> Contacts;
+        [NativeDisableUnsafePtrRestriction] public long ContactsPtr;
 
         public int BodyCount;
         public int VertexCount;
         public int OutputLimit;
+        public int PairCapacity;
+        public int ContactCapacity;
         public CollisionDimension Dimension;
         public bool SkipStaticPairs;
 
-        public void Execute(int pairIndex)
+        public unsafe void Execute(int pairIndex)
         {
-            if (pairIndex < 0 || pairIndex >= Pairs.Length || ContactCounts[pairIndex] <= 0) return;
+            var Pairs = (CandidatePair*)PairsPtr;
+            var BodyEntities = (Entity*)BodyEntitiesPtr;
+            var BodyPoses = (BodyPose*)BodyPosesPtr;
+            var BodyColliders = (Collider*)BodyCollidersPtr;
+            var BodyFilters = (CollisionFilter*)BodyFiltersPtr;
+            var BodyFlags = (byte*)BodyFlagsPtr;
+            var Vertices = (float3*)VerticesPtr;
+            var ContactCounts = (int*)ContactCountsPtr;
+            var ContactOffsets = (int*)ContactOffsetsPtr;
+            var Contacts = (ContactManifold*)ContactsPtr;
+            if (pairIndex < 0 || pairIndex >= PairCapacity || ContactCounts[pairIndex] <= 0) return;
 
             int output = ContactOffsets[pairIndex];
-            if (output < 0 || output >= OutputLimit || output >= Contacts.Length)
+            if (output < 0 || output >= OutputLimit || output >= ContactCapacity)
                 return;
 
             CandidatePair pair = Pairs[pairIndex];
@@ -57,8 +69,8 @@ namespace Ember.Collision
                     BodyFilters[bodyB], BodyFlags[bodyB], SkipStaticPairs))
                 return;
 
-            float3* vertexPool = VertexCount > 0 && Vertices.IsCreated
-                ? (float3*)Vertices.GetUnsafeReadOnlyPtr()
+            float3* vertexPool = VertexCount > 0 && Vertices != null
+                ? (float3*)Vertices
                 : null;
             if (!NarrowphaseMath.TryBuildManifold(
                     BodyColliders[bodyA], BodyPoses[bodyA],

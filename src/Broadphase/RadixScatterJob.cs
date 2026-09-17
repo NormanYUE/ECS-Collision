@@ -13,38 +13,44 @@ namespace Ember.Collision
     [BurstCompile(OptimizeFor = OptimizeFor.Performance)]
     public struct RadixScatterJob : IJobParallelFor
     {
-        [ReadOnly] public NativeArray<uint> Keys;
+        [NativeDisableUnsafePtrRestriction] public long KeysPtr;
 
-        [ReadOnly] public NativeArray<int> Order;
+        [NativeDisableUnsafePtrRestriction] public long OrderPtr;
 
-        [NativeDisableParallelForRestriction] public NativeArray<int> Offsets;
+        [NativeDisableUnsafePtrRestriction] public long OffsetsPtr;
 
-        [NativeDisableParallelForRestriction] public NativeArray<int> Totals;
+        [NativeDisableUnsafePtrRestriction] public long TotalsPtr;
 
-        [NativeDisableParallelForRestriction] public NativeArray<uint> OutKeys;
+        [NativeDisableUnsafePtrRestriction] public long OutKeysPtr;
 
-        [NativeDisableParallelForRestriction] public NativeArray<int> OutOrder;
+        [NativeDisableUnsafePtrRestriction] public long OutOrderPtr;
 
         public int Count;
         public int BlockSize;
         public int BlockCount;
         public int Shift;
 
-        public void Execute(int block)
+        public unsafe void Execute(int block)
         {
+            var Keys = (uint*)KeysPtr;
+            var Order = (int*)OrderPtr;
+            var Offsets = (int*)OffsetsPtr;
+            var Totals = (int*)TotalsPtr;
+            var OutKeys = (uint*)OutKeysPtr;
+            var OutOrder = (int*)OutOrderPtr;
             unsafe
             {
                 RadixSort32.ScatterBlock(
-                    (uint*)Keys.GetUnsafeReadOnlyPtr(),
-                    (int*)Order.GetUnsafeReadOnlyPtr(),
-                    (uint*)OutKeys.GetUnsafePtr(),
-                    (int*)OutOrder.GetUnsafePtr(),
+                    (uint*)Keys,
+                    (int*)Order,
+                    (uint*)OutKeys,
+                    (int*)OutOrder,
                     block,
                     RadixSort32.BlockStart(block, BlockSize),
                     RadixSort32.BlockEnd(block, BlockSize, Count),
                     Shift,
-                    (int*)Offsets.GetUnsafePtr(),
-                    (int*)Totals.GetUnsafePtr(),
+                    (int*)Offsets,
+                    (int*)Totals,
                     BlockCount);
             }
         }

@@ -87,7 +87,7 @@ namespace Ember.Collision
             .Write<CollisionWorld>()
             .StructuralChanges(); // 首次 tick 创建 CollisionWorld 单例实体
 
-        protected override void OnTick(SystemContext ctx)
+        protected override unsafe void OnTick(SystemContext ctx)
         {
             World world = ctx.World;
             m_Owner = world.GetOrCreateSingleton<CollisionWorld>();
@@ -121,11 +121,11 @@ namespace Ember.Collision
             ScheduleBroadphase(config, bodyCount, leafCapacity, chunks.Count).Complete();
 
             // 同步①：读出精确 pair 数（前缀和的总数落在块基址数组末位）。
-            NativeArray<int> pairScanBlocks = m_View.PairScanBlockArray;
-            NativeArray<int> diagnostics = m_View.DiagnosticFlagArray;
-            bool countOverflow = diagnostics.IsCreated
+            var pairScanBlocks = (int*)m_View.PairScanBlockPtr;
+            var diagnostics = (int*)m_View.DiagnosticFlagPtr;
+            bool countOverflow = diagnostics != null
                 && diagnostics[CollisionWorld.DiagPairStackOverflow] != 0;
-            int pairCount = !countOverflow && pairScanBlocks.IsCreated ? pairScanBlocks[scanBlocks] : 0;
+            int pairCount = !countOverflow && pairScanBlocks != null ? pairScanBlocks[scanBlocks] : 0;
             if (pairCount < 0) pairCount = 0;
 
             m_View.EnsurePairDependentCapacity(pairCount, InitialContactCapacity);
@@ -176,42 +176,42 @@ namespace Ember.Collision
 
             JobHandle handle = new GatherJob
             {
-                ChunkInfos = m_View.ChunkInfoArray,
-                ChunkStaticFlags = m_View.ChunkStaticFlagArray,
+                ChunkInfosPtr = m_View.ChunkInfoPtr,
+                ChunkStaticFlagsPtr = m_View.ChunkStaticFlagPtr,
                 Dimension = config.Dimension,
                 VertexPtr = m_View.VertexPointer,
                 VertexPoolLength = m_View.VertexCount,
-                BodyEntities = m_View.BodyEntityArray,
-                BodyBounds = m_View.BodyBoundsArray,
-                BodyPoses = m_View.BodyPoseArray,
-                BodyColliders = m_View.BodyColliderArray,
-                BodyFilters = m_View.BodyFilterArray,
-                BodyFlags = m_View.BodyFlagArray,
-                BodyChunks = m_View.BodyChunkArray,
+                BodyEntitiesPtr = m_View.BodyEntityPtr,
+                BodyBoundsPtr = m_View.BodyBoundsPtr,
+                BodyPosesPtr = m_View.BodyPosePtr,
+                BodyCollidersPtr = m_View.BodyColliderPtr,
+                BodyFiltersPtr = m_View.BodyFilterPtr,
+                BodyFlagsPtr = m_View.BodyFlagPtr,
+                BodyChunksPtr = m_View.BodyChunkPtr,
             }.Schedule(chunkCount, 8, default);
 
             handle = new BoundsReduceJob
             {
-                BodyBounds = m_View.BodyBoundsArray,
-                BlockBounds = m_View.BlockBoundsArray,
+                BodyBoundsPtr = m_View.BodyBoundsPtr,
+                BlockBoundsPtr = m_View.BlockBoundsPtr,
                 BodyCount = bodyCount,
                 BlockSize = CollisionWorldView.BoundsBlockSize,
             }.Schedule(boundsBlocks, 4, handle);
 
             handle = new BoundsReduceFinalJob
             {
-                BlockBounds = m_View.BlockBoundsArray,
+                BlockBoundsPtr = m_View.BlockBoundsPtr,
                 BlockCount = boundsBlocks,
             }.Schedule(handle);
 
             handle = new MortonJob
             {
-                BodyBounds = m_View.BodyBoundsArray,
-                BlockBounds = m_View.BlockBoundsArray,
+                BodyBoundsPtr = m_View.BodyBoundsPtr,
+                BlockBoundsPtr = m_View.BlockBoundsPtr,
                 BlockCount = boundsBlocks,
                 Dimension = config.Dimension,
-                MortonKeys = m_View.MortonKeyArray,
-                BodyOrder = m_View.BodyOrderArray,
+                MortonKeysPtr = m_View.MortonKeyPtr,
+                BodyOrderPtr = m_View.BodyOrderPtr,
             }.Schedule(bodyCount, 64, handle);
 
             handle = ScheduleRadixSort(handle, bodyCount, sortBlocks, keyBits);
@@ -219,9 +219,9 @@ namespace Ember.Collision
 
             handle = new BvhLeafJob
             {
-                BodyBounds = m_View.BodyBoundsArray,
-                SortedOrder = m_View.SortedOrderArray,
-                Nodes = m_View.BvhNodeArray,
+                BodyBoundsPtr = m_View.BodyBoundsPtr,
+                SortedOrderPtr = m_View.SortedOrderPtr,
+                NodesPtr = m_View.BvhNodePtr,
                 BodyCount = bodyCount,
                 LeafCapacity = leafCapacity,
             }.Schedule(leafCapacity, 64, handle);
@@ -230,11 +230,11 @@ namespace Ember.Collision
 
             handle = new PairCountJob
             {
-                Nodes = m_View.BvhNodeArray,
-                BodyBounds = m_View.BodyBoundsArray,
-                SortedOrder = m_View.SortedOrderArray,
-                TraversalStack = m_View.TraversalStackArray,
-                PairCounts = m_View.PairCountArray,
+                NodesPtr = m_View.BvhNodePtr,
+                BodyBoundsPtr = m_View.BodyBoundsPtr,
+                SortedOrderPtr = m_View.SortedOrderPtr,
+                TraversalStackPtr = m_View.TraversalStackPtr,
+                PairCountsPtr = m_View.PairCountPtr,
                 Root = BvhBuilder.RootIndex(leafCapacity),
                 BodyCount = bodyCount,
                 StackDepth = CollisionWorldView.TraversalStackDepth,
@@ -242,8 +242,8 @@ namespace Ember.Collision
 
             handle = new PairCountNormalizeJob
             {
-                PairCounts = m_View.PairCountArray,
-                DiagnosticFlags = m_View.DiagnosticFlagArray,
+                PairCountsPtr = m_View.PairCountPtr,
+                DiagnosticFlagsPtr = m_View.DiagnosticFlagPtr,
                 BodyCount = bodyCount,
                 StackOverflowSlot = CollisionWorld.DiagPairStackOverflow,
             }.Schedule(handle);
@@ -251,23 +251,23 @@ namespace Ember.Collision
             // pair 前缀和：块内前缀(P) → 块前缀(S) → 叠加块基址(P)。
             handle = new ScanBlockJob
             {
-                Source = m_View.PairCountArray,
-                Destination = m_View.PairOffsetArray,
-                BlockTotals = m_View.PairScanBlockArray,
+                SourcePtr = m_View.PairCountPtr,
+                DestinationPtr = m_View.PairOffsetPtr,
+                BlockTotalsPtr = m_View.PairScanBlockPtr,
                 Count = bodyCount,
                 BlockSize = CollisionWorldView.ScanBlockSize,
             }.Schedule(scanBlocks, 1, handle);
 
             handle = new ScanBlocksJob
             {
-                BlockTotals = m_View.PairScanBlockArray,
+                BlockTotalsPtr = m_View.PairScanBlockPtr,
                 BlockCount = scanBlocks,
             }.Schedule(handle);
 
             return new ScanAddJob
             {
-                Destination = m_View.PairOffsetArray,
-                BlockTotals = m_View.PairScanBlockArray,
+                DestinationPtr = m_View.PairOffsetPtr,
+                BlockTotalsPtr = m_View.PairScanBlockPtr,
                 Count = bodyCount,
                 BlockSize = CollisionWorldView.ScanBlockSize,
             }.Schedule(scanBlocks, 1, handle);
@@ -286,15 +286,15 @@ namespace Ember.Collision
             {
                 int shift = RadixSort32.ShiftForPass(pass);
 
-                NativeArray<uint> keys = inScratch ? m_View.MortonKeyScratchArray : m_View.MortonKeyArray;
-                NativeArray<int> order = inScratch ? m_View.BodyOrderScratchArray : m_View.BodyOrderArray;
-                NativeArray<uint> outKeys = inScratch ? m_View.MortonKeyArray : m_View.MortonKeyScratchArray;
-                NativeArray<int> outOrder = inScratch ? m_View.BodyOrderArray : m_View.BodyOrderScratchArray;
+                long keys = inScratch ? m_View.MortonKeyScratchPtr : m_View.MortonKeyPtr;
+                long order = inScratch ? m_View.BodyOrderScratchPtr : m_View.BodyOrderPtr;
+                long outKeys = inScratch ? m_View.MortonKeyPtr : m_View.MortonKeyScratchPtr;
+                long outOrder = inScratch ? m_View.BodyOrderPtr : m_View.BodyOrderScratchPtr;
 
                 handle = new RadixHistogramJob
                 {
-                    Keys = keys,
-                    Histogram = m_View.BucketHistogramArray,
+                    KeysPtr = keys,
+                    HistogramPtr = m_View.BucketHistogramPtr,
                     Count = count,
                     BlockSize = CollisionWorldView.SortBlockSize,
                     BlockCount = blockCount,
@@ -303,25 +303,25 @@ namespace Ember.Collision
 
                 handle = new RadixBucketPrefixJob
                 {
-                    Histogram = m_View.BucketHistogramArray,
-                    Offsets = m_View.BucketOffsetArray,
-                    Totals = m_View.BucketTotalsArray,
+                    HistogramPtr = m_View.BucketHistogramPtr,
+                    OffsetsPtr = m_View.BucketOffsetPtr,
+                    TotalsPtr = m_View.BucketTotalsPtr,
                     BlockCount = blockCount,
                 }.Schedule(RadixSort32.BucketCount, 8, handle);
 
                 handle = new RadixTotalsPrefixJob
                 {
-                    Totals = m_View.BucketTotalsArray,
+                    TotalsPtr = m_View.BucketTotalsPtr,
                 }.Schedule(handle);
 
                 handle = new RadixScatterJob
                 {
-                    Keys = keys,
-                    Order = order,
-                    Offsets = m_View.BucketOffsetArray,
-                    Totals = m_View.BucketTotalsArray,
-                    OutKeys = outKeys,
-                    OutOrder = outOrder,
+                    KeysPtr = keys,
+                    OrderPtr = order,
+                    OffsetsPtr = m_View.BucketOffsetPtr,
+                    TotalsPtr = m_View.BucketTotalsPtr,
+                    OutKeysPtr = outKeys,
+                    OutOrderPtr = outOrder,
                     Count = count,
                     BlockSize = CollisionWorldView.SortBlockSize,
                     BlockCount = blockCount,
@@ -350,7 +350,7 @@ namespace Ember.Collision
 
                 handle = new BvhMergeJob
                 {
-                    Nodes = m_View.BvhNodeArray,
+                    NodesPtr = m_View.BvhNodePtr,
                     LevelStart = levelStart,
                     ParentStart = parentStart,
                 }.Schedule(parentCount, 8, handle);
@@ -362,7 +362,7 @@ namespace Ember.Collision
 
             return new BvhFinalizeJob
             {
-                Nodes = m_View.BvhNodeArray,
+                NodesPtr = m_View.BvhNodePtr,
                 LevelStart = levelStart,
                 LevelCount = levelCount,
                 ParentStart = parentStart,
@@ -374,13 +374,13 @@ namespace Ember.Collision
         {
             return new PairCollectJob
             {
-                Nodes = m_View.BvhNodeArray,
-                BodyBounds = m_View.BodyBoundsArray,
-                SortedOrder = m_View.SortedOrderArray,
-                PairOffsets = m_View.PairOffsetArray,
-                PairCounts = m_View.PairCountArray,
-                TraversalStack = m_View.TraversalStackArray,
-                Pairs = m_View.CandidatePairArray,
+                NodesPtr = m_View.BvhNodePtr,
+                BodyBoundsPtr = m_View.BodyBoundsPtr,
+                SortedOrderPtr = m_View.SortedOrderPtr,
+                PairOffsetsPtr = m_View.PairOffsetPtr,
+                PairCountsPtr = m_View.PairCountPtr,
+                TraversalStackPtr = m_View.TraversalStackPtr,
+                PairsPtr = m_View.CandidatePairPtr,
                 Root = BvhBuilder.RootIndex(leafCapacity),
                 BodyCount = bodyCount,
                 StackDepth = CollisionWorldView.TraversalStackDepth,
@@ -388,9 +388,9 @@ namespace Ember.Collision
         }
 
         /// <summary>汇总收集阶段的 leaf 哨兵；返回 true 时调用方必须 fail closed。</summary>
-        private bool CollectPairDiagnostics(int bodyCount)
+        private unsafe bool CollectPairDiagnostics(int bodyCount)
         {
-            NativeArray<int> pairCounts = m_View.PairCountArray;
+            var pairCounts = (int*)m_View.PairCountPtr;
             bool truncated = false;
             for (int leafIndex = 0; leafIndex < bodyCount; leafIndex++)
             {
@@ -400,8 +400,8 @@ namespace Ember.Collision
             }
 
             if (!truncated) return false;
-            NativeArray<int> diagnostics = m_View.DiagnosticFlagArray;
-            diagnostics[CollisionWorld.DiagPairCapacityTruncated] = 1;
+            var diagFlags = (int*)m_View.DiagnosticFlagPtr;
+            diagFlags[CollisionWorld.DiagPairCapacityTruncated] = 1;
             return true;
         }
 
@@ -409,10 +409,10 @@ namespace Ember.Collision
         /// 诊断汇总告警。溢出意味着当帧<b>静默丢失</b>了 pair 或接触——
         /// 这类问题在运行时表现为「偶发穿模」，必须显式暴露而非容忍。
         /// </summary>
-        private void WarnOnDiagnostics()
+        private unsafe void WarnOnDiagnostics()
         {
-            NativeArray<int> diagnostics = m_View.DiagnosticArray;
-            if (!diagnostics.IsCreated) return;
+            var diagnostics = (int*)m_View.DiagnosticPtr;
+            if (diagnostics == null) return;
 
             if (diagnostics[CollisionWorld.DiagPairStackOverflow] != 0)
             {

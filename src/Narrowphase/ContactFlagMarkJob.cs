@@ -1,6 +1,7 @@
 using Unity.Burst;
 using Unity.Collections;
 using Unity.Jobs;
+using Unity.Collections.LowLevel.Unsafe;
 
 namespace Ember.Collision
 {
@@ -11,20 +12,23 @@ namespace Ember.Collision
     [BurstCompile(OptimizeFor = OptimizeFor.Performance)]
     public struct ContactFlagMarkJob : IJob
     {
-        [ReadOnly] public NativeArray<CandidatePair> Pairs;
+        [NativeDisableUnsafePtrRestriction] public long PairsPtr;
 
-        [ReadOnly] public NativeArray<int> ContactCounts;
+        [NativeDisableUnsafePtrRestriction] public long ContactCountsPtr;
 
-        public NativeArray<byte> BodyContactFlags;
+        [NativeDisableUnsafePtrRestriction] public long BodyContactFlagsPtr;
 
         public int PairCount;
         public int BodyCount;
+        public int PairCapacity;
 
-        public void Execute()
+        public unsafe void Execute()
         {
+            var Pairs = (CandidatePair*)PairsPtr;
+            var ContactCounts = (int*)ContactCountsPtr;
+            var BodyContactFlags = (byte*)BodyContactFlagsPtr;
             int limit = PairCount;
-            if (limit > Pairs.Length) limit = Pairs.Length;
-            if (limit > ContactCounts.Length) limit = ContactCounts.Length;
+            if (limit > PairCapacity) limit = PairCapacity;
 
             for (int pairIndex = 0; pairIndex < limit; pairIndex++)
             {

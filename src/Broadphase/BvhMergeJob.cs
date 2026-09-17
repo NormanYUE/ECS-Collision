@@ -13,17 +13,18 @@ namespace Ember.Collision
     [BurstCompile(OptimizeFor = OptimizeFor.Performance)]
     public struct BvhMergeJob : IJobParallelFor
     {
-        [NativeDisableParallelForRestriction] public NativeArray<BvhNode> Nodes;
+        [NativeDisableUnsafePtrRestriction] public long NodesPtr;
 
         public int LevelStart;
         public int ParentStart;
 
-        public void Execute(int parentIndex)
+        public unsafe void Execute(int parentIndex)
         {
+            var Nodes = (BvhNode*)NodesPtr;
             unsafe
             {
                 BvhBuilder.MergeParent(
-                    (BvhNode*)Nodes.GetUnsafePtr(), LevelStart, ParentStart, parentIndex);
+                    (BvhNode*)Nodes, LevelStart, ParentStart, parentIndex);
             }
         }
     }

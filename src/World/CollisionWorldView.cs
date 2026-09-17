@@ -48,6 +48,12 @@ namespace Ember.Collision
         /// <summary>当帧稠密 body 数。</summary>
         public readonly int BodyCount => m_World.GetComponent<CollisionWorld>(m_Owner).BodyCount;
 
+        /// <summary>当帧 Chunk 数（= <c>ChunkInfoPtr</c> 可取的元素数）。</summary>
+        public readonly int ChunkCount => State.ChunkCount;
+
+        /// <summary>接触事件 buffer 容量。</summary>
+        public readonly int ContactEventCapacity => State.ContactEventCapacity;
+
         /// <summary>当帧候选 pair 数。</summary>
         public readonly int CandidatePairCount => m_World.GetComponent<CollisionWorld>(m_Owner).CandidatePairCount;
 
@@ -69,52 +75,52 @@ namespace Ember.Collision
         /// 只读，不可写回、不可缓存跨帧（下一帧重填 / 扩容后视图即失效）。
         /// 零分配 —— 直接包装 World 托管 buffer 的裸内存。
         /// </summary>
-        public readonly NativeArray<BodyPose> BodyPoses
+        public readonly long BodyPosesPtr
         {
             get
             {
-                RequireQueryReady(nameof(BodyPoses));
-                return NativeView<BodyPose>(State.BodyPoses, State.BodyCount);
+                RequireQueryReady(nameof(BodyPosesPtr));
+                return NativePointer<BodyPose>(State.BodyPoses, State.BodyCount);
             }
         }
 
         /// <summary>当帧稠密 body 碰撞体的只读视图。有效性约束同 <see cref="BodyPoses"/>。</summary>
-        public readonly NativeArray<Collider> BodyColliders
+        public readonly long BodyCollidersPtr
         {
             get
             {
-                RequireQueryReady(nameof(BodyColliders));
-                return NativeView<Collider>(State.BodyColliders, State.BodyCount);
+                RequireQueryReady(nameof(BodyCollidersPtr));
+                return NativePointer<Collider>(State.BodyColliders, State.BodyCount);
             }
         }
 
         /// <summary>当帧稠密 body 过滤层的只读视图。有效性约束同 <see cref="BodyPoses"/>。</summary>
-        public readonly NativeArray<CollisionFilter> BodyFilters
+        public readonly long BodyFiltersPtr
         {
             get
             {
-                RequireQueryReady(nameof(BodyFilters));
-                return NativeView<CollisionFilter>(State.BodyFilters, State.BodyCount);
+                RequireQueryReady(nameof(BodyFiltersPtr));
+                return NativePointer<CollisionFilter>(State.BodyFilters, State.BodyCount);
             }
         }
 
         /// <summary>当帧稠密 body 标志（含 Static 位）的只读视图。有效性约束同 <see cref="BodyPoses"/>。</summary>
-        public readonly NativeArray<byte> BodyFlags
+        public readonly long BodyFlagsPtr
         {
             get
             {
-                RequireQueryReady(nameof(BodyFlags));
-                return NativeView<byte>(State.BodyFlags, State.BodyCount);
+                RequireQueryReady(nameof(BodyFlagsPtr));
+                return NativePointer<byte>(State.BodyFlags, State.BodyCount);
             }
         }
 
         /// <summary>凸形状顶点池的只读视图（Polygon2D 顶点存储，长度 <see cref="VertexPoolCount"/>）。有效性约束同 <see cref="BodyPoses"/>。</summary>
-        public readonly NativeArray<float3> VertexPool
+        public readonly long VertexPoolPtr
         {
             get
             {
-                RequireQueryReady(nameof(VertexPool));
-                return NativeView<float3>(State.Vertices, State.VertexPoolCount);
+                RequireQueryReady(nameof(VertexPoolPtr));
+                return NativePointer<float3>(State.Vertices, State.VertexPoolCount);
             }
         }
 
@@ -303,13 +309,13 @@ namespace Ember.Collision
         /// Job 用「按槽位写 1」而非原子自增：同一槽被多线程重复写同一个值是幂等的，
         /// 因此既能发现溢出，又不引入原子操作（Burst 友好、无竞争）。
         /// </summary>
-        public void AccumulateDiagnostics()
+        public unsafe void AccumulateDiagnostics()
         {
-            NativeArray<int> flags = DiagnosticFlagArray;
-            if (!flags.IsCreated) return;
+            var flags = (int*)DiagnosticFlagPtr;
+            if (flags == null) return;
 
             int overflow = 0;
-            for (int i = 0; i < flags.Length; i++)
+            for (int i = 0; i < CollisionWorld.DiagnosticSlotCount; i++)
             {
                 if (flags[i] != 0) overflow++;
             }
@@ -328,8 +334,8 @@ namespace Ember.Collision
         }
 
         /// <summary>逐 Chunk 静态标志（由串行侧依据 Static 标签的 Chunk 归属填写）。</summary>
-        internal readonly NativeArray<byte> ChunkStaticFlagArray =>
-            NativeView<byte>(State.ChunkStaticFlags, State.ChunkCount);
+        internal readonly long ChunkStaticFlagPtr =>
+            NativePointer<byte>(State.ChunkStaticFlags, State.ChunkCount);
 
         /// <summary>写入某 Chunk 的静态标志（串行侧调用）。</summary>
         public void SetChunkStatic(int chunkIndex, bool isStatic)
@@ -413,66 +419,66 @@ namespace Ember.Collision
         // ---------------------------------------------------------------------
 
         /// <summary>Chunk 元数据表。</summary>
-        internal readonly NativeArray<ChunkInfo> ChunkInfoArray =>
-            NativeView<ChunkInfo>(State.ChunkInfos, State.ChunkCount);
+        internal readonly long ChunkInfoPtr =>
+            NativePointer<ChunkInfo>(State.ChunkInfos, State.ChunkCount);
 
         /// <summary>稠密 body 实体句柄。</summary>
-        internal readonly NativeArray<Entity> BodyEntityArray => NativeView<Entity>(State.BodyEntities, State.BodyCount);
+        internal readonly long BodyEntityPtr => NativePointer<Entity>(State.BodyEntities, State.BodyCount);
 
         /// <summary>稠密 body 世界包围盒。</summary>
-        internal readonly NativeArray<Aabb> BodyBoundsArray => NativeView<Aabb>(State.BodyBounds, State.BodyCount);
+        internal readonly long BodyBoundsPtr => NativePointer<Aabb>(State.BodyBounds, State.BodyCount);
 
         /// <summary>稠密 body 位姿。</summary>
-        internal readonly NativeArray<BodyPose> BodyPoseArray => NativeView<BodyPose>(State.BodyPoses, State.BodyCount);
+        internal readonly long BodyPosePtr => NativePointer<BodyPose>(State.BodyPoses, State.BodyCount);
 
         /// <summary>稠密 body 形状。</summary>
-        internal readonly NativeArray<Collider> BodyColliderArray => NativeView<Collider>(State.BodyColliders, State.BodyCount);
+        internal readonly long BodyColliderPtr => NativePointer<Collider>(State.BodyColliders, State.BodyCount);
 
         /// <summary>稠密 body 过滤器。</summary>
-        internal readonly NativeArray<CollisionFilter> BodyFilterArray =>
-            NativeView<CollisionFilter>(State.BodyFilters, State.BodyCount);
+        internal readonly long BodyFilterPtr =>
+            NativePointer<CollisionFilter>(State.BodyFilters, State.BodyCount);
 
         /// <summary>稠密 body 标志位。</summary>
-        internal readonly NativeArray<byte> BodyFlagArray => NativeView<byte>(State.BodyFlags, State.BodyCount);
+        internal readonly long BodyFlagPtr => NativePointer<byte>(State.BodyFlags, State.BodyCount);
 
         /// <summary>稠密 body 的本帧接触标志（P2 count Job 写入）。</summary>
-        internal readonly NativeArray<byte> BodyContactFlagArray =>
-            NativeView<byte>(State.BodyContactFlags, State.BodyCount);
+        internal readonly long BodyContactFlagPtr =>
+            NativePointer<byte>(State.BodyContactFlags, State.BodyCount);
 
         /// <summary>稠密下标 → chunk 下标。</summary>
-        internal readonly NativeArray<int> BodyChunkArray => NativeView<int>(State.BodyChunks, State.BodyCount);
+        internal readonly long BodyChunkPtr => NativePointer<int>(State.BodyChunks, State.BodyCount);
 
         /// <summary>Morton 键。</summary>
-        internal readonly NativeArray<uint> MortonKeyArray => NativeView<uint>(State.MortonKeys, State.BodyCount);
+        internal readonly long MortonKeyPtr => NativePointer<uint>(State.MortonKeys, State.BodyCount);
 
         /// <summary>按 Morton 排序后的稠密下标。</summary>
-        internal readonly NativeArray<int> BodyOrderArray => NativeView<int>(State.BodyOrder, State.BodyCount);
+        internal readonly long BodyOrderPtr => NativePointer<int>(State.BodyOrder, State.BodyCount);
 
         /// <summary>Morton 键双缓冲目标。</summary>
-        internal readonly NativeArray<uint> MortonKeyScratchArray =>
-            NativeView<uint>(State.MortonKeysScratch, State.BodyCount);
+        internal readonly long MortonKeyScratchPtr =>
+            NativePointer<uint>(State.MortonKeysScratch, State.BodyCount);
 
         /// <summary>基数排序双缓冲目标。</summary>
-        internal readonly NativeArray<int> BodyOrderScratchArray =>
-            NativeView<int>(State.BodyOrderScratch, State.BodyCount);
+        internal readonly long BodyOrderScratchPtr =>
+            NativePointer<int>(State.BodyOrderScratch, State.BodyCount);
 
         /// <summary>每叶候选 pair 计数。</summary>
-        internal readonly NativeArray<int> PairCountArray => NativeView<int>(State.PairCounts, State.BodyCount);
+        internal readonly long PairCountPtr => NativePointer<int>(State.PairCounts, State.BodyCount);
 
         /// <summary>pair 前缀和（长度 = bodyCount + 1）。</summary>
-        internal readonly NativeArray<int> PairOffsetArray => NativeView<int>(State.PairOffsets, State.BodyCount + 1);
+        internal readonly long PairOffsetPtr => NativePointer<int>(State.PairOffsets, State.BodyCount + 1);
 
         /// <summary>基数排序分块直方图。</summary>
-        internal readonly NativeArray<int> BucketHistogramArray =>
-            NativeView<int>(State.BucketHistogram, State.SortBlockCount * 256);
+        internal readonly long BucketHistogramPtr =>
+            NativePointer<int>(State.BucketHistogram, State.SortBlockCount * 256);
 
         /// <summary>基数排序分块偏移。</summary>
-        internal readonly NativeArray<int> BucketOffsetArray =>
-            NativeView<int>(State.BucketOffsets, State.SortBlockCount * 256);
+        internal readonly long BucketOffsetPtr =>
+            NativePointer<int>(State.BucketOffsets, State.SortBlockCount * 256);
 
         /// <summary>分块包围盒归约中间量。</summary>
-        internal readonly NativeArray<Aabb> BlockBoundsArray =>
-            NativeView<Aabb>(State.BlockBounds, math.max(1, (State.BodyCount + BoundsBlockSize - 1) / BoundsBlockSize));
+        internal readonly long BlockBoundsPtr =>
+            NativePointer<Aabb>(State.BlockBounds, math.max(1, (State.BodyCount + BoundsBlockSize - 1) / BoundsBlockSize));
 
         /// <summary>凸形状顶点池裸指针（供 Job 使用）。</summary>
         internal readonly unsafe long VertexPointer
@@ -485,8 +491,8 @@ namespace Ember.Collision
         }
 
         /// <summary>桶总数（先存总数，原地前缀和后为桶全局起始）。</summary>
-        internal readonly NativeArray<int> BucketTotalsArray =>
-            NativeView<int>(State.BucketTotals, RadixSort32.BucketCount);
+        internal readonly long BucketTotalsPtr =>
+            NativePointer<int>(State.BucketTotals, RadixSort32.BucketCount);
 
         /// <summary>
         /// 按 Morton 排序后的稠密下标。基数排序的键 / 下标在主副数组间乒乓，
@@ -494,10 +500,10 @@ namespace Ember.Collision
         /// 故此处按 <see cref="CollisionWorld.SortResultInScratch"/> 动态取值——
         /// 若固定读主数组，2D 场景会读到半排序的结果，表现为<b>偶发漏检</b>。
         /// </summary>
-        internal readonly NativeArray<int> SortedOrderArray =>
+        internal readonly long SortedOrderPtr =>
             State.SortResultInScratch != 0
-                ? NativeView<int>(State.BodyOrderScratch, State.BodyCount)
-                : NativeView<int>(State.BodyOrder, State.BodyCount);
+                ? NativePointer<int>(State.BodyOrderScratch, State.BodyCount)
+                : NativePointer<int>(State.BodyOrder, State.BodyCount);
 
         /// <summary>记录排序结果的存放位置（调度期由趟数奇偶确定）。</summary>
         public void SetSortResultInScratch(bool inScratch)
@@ -507,32 +513,44 @@ namespace Ember.Collision
         }
 
         /// <summary>分块扫描块基址（长度 = 块数 + 1，末位存候选 pair 总数）。</summary>
-        internal readonly NativeArray<int> PairScanBlockArray =>
-            NativeView<int>(State.PairScanBlocks,
+        internal readonly long PairScanBlockPtr =>
+            NativePointer<int>(State.PairScanBlocks,
                 BlockScan.BlockCount(State.BodyCount, ScanBlockSize) + 1);
 
         /// <summary>分块扫描块基址（接触；末位存流形总数）。</summary>
-        internal readonly NativeArray<int> ContactScanBlockArray =>
-            NativeView<int>(State.ContactScanBlocks,
+        internal readonly long ContactScanBlockPtr =>
+            NativePointer<int>(State.ContactScanBlocks,
                 BlockScan.BlockCount(math.max(1, State.CandidatePairCount), ScanBlockSize) + 1);
 
         /// <summary>粘滞诊断标志（下标 = 诊断槽）。</summary>
-        internal readonly NativeArray<int> DiagnosticFlagArray =>
-            NativeView<int>(State.DiagnosticFlags, CollisionWorld.DiagnosticSlotCount);
+        internal readonly long DiagnosticFlagPtr =>
+            NativePointer<int>(State.DiagnosticFlags, CollisionWorld.DiagnosticSlotCount);
 
         /// <summary>BVH 节点数组。</summary>
-        internal readonly NativeArray<BvhNode> BvhNodeArray => NativeView<BvhNode>(State.BvhNodes, State.NodeCapacity);
+        internal readonly long BvhNodePtr => NativePointer<BvhNode>(State.BvhNodes, State.NodeCapacity);
 
         /// <summary>诊断计数（长度 = <see cref="CollisionWorld.DiagnosticSlotCount"/>）。</summary>
-        internal readonly NativeArray<int> DiagnosticArray =>
-            NativeView<int>(State.Diagnostics, CollisionWorld.DiagnosticSlotCount);
+        internal readonly long DiagnosticPtr =>
+            NativePointer<int>(State.Diagnostics, CollisionWorld.DiagnosticSlotCount);
 
         /// <summary>凸形状顶点池。</summary>
-        internal readonly NativeArray<float3> VertexArray =>
-            NativeView<float3>(State.Vertices, State.VertexPoolCapacity);
+        internal readonly long VertexPtr =>
+            NativePointer<float3>(State.Vertices, State.VertexPoolCapacity);
 
         /// <summary>凸形状顶点池已用数量。</summary>
         public readonly int VertexCount => State.VertexPoolCount;
+
+        // 视图改成裸指针后，Job 侧拿不到 NativeArray.Length，容量必须显式传入。
+        // 这三个值即原 NativeView 调用里用的长度，语义不变。
+
+        /// <summary>候选 pair buffer 容量（= <c>CandidatePairPtr</c> 可取的元素数）。</summary>
+        public readonly int PairCapacity => State.PairCapacity;
+
+        /// <summary>接触流形 buffer 容量（= <c>ContactPtr</c> 可取的元素数）。</summary>
+        public readonly int ContactCapacity => State.ContactCapacity;
+
+        /// <summary>contact pair 历史 buffer 容量。</summary>
+        public readonly int ContactPairCapacity => State.ContactPairCapacity;
 
         /// <summary>本帧真实检测到的流形数。</summary>
         public readonly int DetectedContactCount => State.DetectedContactCount;
@@ -547,55 +565,56 @@ namespace Ember.Collision
         public readonly bool IsQueryReady => State.QueryReady != 0;
 
         /// <summary>并行遍历栈。</summary>
-        internal readonly NativeArray<int> TraversalStackArray =>
-            NativeView<int>(State.TraversalStack, State.ThreadCapacity * TraversalStackDepth);
+        internal readonly long TraversalStackPtr =>
+            NativePointer<int>(State.TraversalStack, State.ThreadCapacity * TraversalStackDepth);
 
         /// <summary>候选 pair 数组。</summary>
-        internal readonly NativeArray<CandidatePair> CandidatePairArray =>
-            NativeView<CandidatePair>(State.CandidatePairs, State.PairCapacity);
+        internal readonly long CandidatePairPtr =>
+            NativePointer<CandidatePair>(State.CandidatePairs, State.PairCapacity);
 
         /// <summary>每 pair 流形计数。</summary>
-        internal readonly NativeArray<int> ContactCountArray =>
-            NativeView<int>(State.ContactCounts, math.max(1, State.PairCapacity));
+        internal readonly long ContactCountPtr =>
+            NativePointer<int>(State.ContactCounts, math.max(1, State.PairCapacity));
 
         /// <summary>接触前缀和（长度 = pairCount + 1）。</summary>
-        internal readonly NativeArray<int> ContactOffsetArray =>
-            NativeView<int>(State.ContactOffsets, math.max(1, State.PairCapacity + 1));
+        internal readonly long ContactOffsetPtr =>
+            NativePointer<int>(State.ContactOffsets, math.max(1, State.PairCapacity + 1));
 
         /// <summary>接触流形数组。</summary>
-        internal readonly NativeArray<ContactManifold> ContactArray =>
-            NativeView<ContactManifold>(State.Contacts, State.ContactCapacity);
+        internal readonly long ContactPtr =>
+            NativePointer<ContactManifold>(State.Contacts, State.ContactCapacity);
 
-        internal readonly NativeArray<ContactPairRecord> PreviousContactPairArray =>
-            NativeView<ContactPairRecord>(State.PreviousContactPairs, State.ContactPairCapacity);
+        internal readonly long PreviousContactPairPtr =>
+            NativePointer<ContactPairRecord>(State.PreviousContactPairs, State.ContactPairCapacity);
 
-        internal readonly NativeArray<ContactPairRecord> CurrentContactPairArray =>
-            NativeView<ContactPairRecord>(State.CurrentContactPairs, State.ContactPairCapacity);
+        internal readonly long CurrentContactPairPtr =>
+            NativePointer<ContactPairRecord>(State.CurrentContactPairs, State.ContactPairCapacity);
 
-        internal readonly NativeArray<ContactPairRecord> ContactPairScratchArray =>
-            NativeView<ContactPairRecord>(State.ContactPairScratch, State.ContactPairCapacity);
+        internal readonly long ContactPairScratchPtr =>
+            NativePointer<ContactPairRecord>(State.ContactPairScratch, State.ContactPairCapacity);
 
-        internal readonly NativeArray<ContactEvent> ContactEventArray =>
-            NativeView<ContactEvent>(State.ContactEvents, State.ContactEventCapacity);
+        internal readonly long ContactEventPtr =>
+            NativePointer<ContactEvent>(State.ContactEvents, State.ContactEventCapacity);
 
         /// <summary>
         /// 当前帧 LBVH 的 AABB overlap 查询。结果追加到调用方容器；返回 false 不保留部分结果。
         /// 这是 broad query，命中不等同于精确 shape overlap。
         /// 只能在主线程、宽相完整发布后调用；不支持并发查询。
         /// </summary>
-        public bool OverlapAabb(in Aabb queryBounds, uint belongsToMask, ref NativeList<Entity> results)
+        public unsafe bool OverlapAabb(in Aabb queryBounds, uint belongsToMask, ref NativeList<Entity> results)
         {
             if (!IsQueryReady) return false;
-            if (State.BodyCount <= 0 || queryBounds.IsEmpty) return true;
+            int bodyCount = State.BodyCount;
+            if (bodyCount <= 0 || queryBounds.IsEmpty) return true;
             int initialResultCount = results.Length;
 
-            NativeArray<BvhNode> nodes = BvhNodeArray;
-            NativeArray<int> order = SortedOrderArray;
-            NativeArray<Entity> entities = BodyEntityArray;
-            NativeArray<CollisionFilter> filters = BodyFilterArray;
-            NativeArray<byte> flags = BodyFlagArray;
-            NativeArray<int> stack = TraversalStackArray;
-            if (!nodes.IsCreated || !order.IsCreated || !stack.IsCreated) return false;
+            var nodes = (BvhNode*)BvhNodePtr;
+            var order = (int*)SortedOrderPtr;
+            var entities = (Entity*)BodyEntityPtr;
+            var filters = (CollisionFilter*)BodyFilterPtr;
+            var flags = (byte*)BodyFlagPtr;
+            var stack = (int*)TraversalStackPtr;
+            if (nodes == null || order == null || stack == null) return false;
 
             int stackCapacity = TraversalStackDepth;
             int root = BvhBuilder.RootIndex(LeafCapacity);
@@ -611,7 +630,7 @@ namespace Ember.Collision
                 {
                     if (node.MaxLeaf < 0) continue;
                     int body = order[node.MaxLeaf];
-                    if (IsQueryable(body, belongsToMask, filters, flags)) results.Add(entities[body]);
+                    if (IsQueryable(body, bodyCount, belongsToMask, filters, flags)) results.Add(entities[body]);
                     continue;
                 }
 
@@ -628,7 +647,7 @@ namespace Ember.Collision
         }
 
         /// <summary>当前帧 LBVH 的最近 AABB 射线查询，不执行精确 shape cast。仅主线程非并发调用。</summary>
-        public bool RaycastAabb(
+        public unsafe bool RaycastAabb(
             float3 origin,
             float3 direction,
             float maxDistance,
@@ -636,7 +655,8 @@ namespace Ember.Collision
             out CollisionRaycastHit hit)
         {
             hit = default;
-            if (!IsQueryReady || State.BodyCount <= 0 || maxDistance < 0f) return false;
+            int bodyCount = State.BodyCount;
+            if (!IsQueryReady || bodyCount <= 0 || maxDistance < 0f) return false;
             float directionLengthSq = math.lengthsq(direction);
             if (directionLengthSq <= 1e-12f) return false;
 
@@ -647,14 +667,14 @@ namespace Ember.Collision
                 Min = math.min(origin, end),
                 Max = math.max(origin, end),
             };
-            NativeArray<BvhNode> nodes = BvhNodeArray;
-            NativeArray<int> order = SortedOrderArray;
-            NativeArray<Aabb> bounds = BodyBoundsArray;
-            NativeArray<Entity> entities = BodyEntityArray;
-            NativeArray<CollisionFilter> filters = BodyFilterArray;
-            NativeArray<byte> flags = BodyFlagArray;
-            NativeArray<int> stack = TraversalStackArray;
-            if (!nodes.IsCreated || !order.IsCreated || !stack.IsCreated) return false;
+            var nodes = (BvhNode*)BvhNodePtr;
+            var order = (int*)SortedOrderPtr;
+            var bounds = (Aabb*)BodyBoundsPtr;
+            var entities = (Entity*)BodyEntityPtr;
+            var filters = (CollisionFilter*)BodyFilterPtr;
+            var flags = (byte*)BodyFlagPtr;
+            var stack = (int*)TraversalStackPtr;
+            if (nodes == null || order == null || stack == null) return false;
 
             int stackCapacity = TraversalStackDepth;
             int root = BvhBuilder.RootIndex(LeafCapacity);
@@ -672,7 +692,7 @@ namespace Ember.Collision
                 {
                     if (node.MaxLeaf < 0) continue;
                     int body = order[node.MaxLeaf];
-                    if (!IsQueryable(body, belongsToMask, filters, flags)) continue;
+                    if (!IsQueryable(body, bodyCount, belongsToMask, filters, flags)) continue;
                     if (!CollisionQueryMath.TryRayAabb(origin, normalized, nearest, bounds[body], out float distance, out float3 normal)) continue;
 
                     nearest = distance;
@@ -699,15 +719,16 @@ namespace Ember.Collision
             return found;
         }
 
-        private static bool IsQueryable(
+        private static unsafe bool IsQueryable(
             int body,
+            int bodyCount,
             uint belongsToMask,
-            NativeArray<CollisionFilter> filters,
-            NativeArray<byte> flags)
+            CollisionFilter* filters,
+            byte* flags)
         {
             byte participation = (byte)(CollisionBody.EnabledBit | CollisionBody.ActiveBit);
             return body >= 0
-                && body < filters.Length
+                && body < bodyCount
                 && (filters[body].BelongsTo & belongsToMask) != 0
                 && (flags[body] & participation) == participation;
         }
@@ -771,12 +792,20 @@ namespace Ember.Collision
             state.OverflowCount += count;
         }
 
-        private readonly unsafe NativeArray<T> NativeView<T>(BufferHandle handle, int length) where T : unmanaged
+        /// <summary>
+        /// 取 World buffer 的裸指针供 Job 使用（0 表示不可用）。
+        ///
+        /// 刻意<b>不</b>返回 <see cref="NativeArray{T}"/>：由裸内存构造的 NativeArray
+        /// 其安全句柄是 <c>default</c>（ConvertExistingDataToNativeArray 不设 m_Safety），
+        /// 作为 Job 容器字段会在调度期被拒绝，在主线程索引会解引用空句柄节点。
+        /// 详见 <see cref="NativeBufferUtil"/> 的说明。
+        /// </summary>
+        private readonly unsafe long NativePointer<T>(BufferHandle handle, int length) where T : unmanaged
         {
-            if (length <= 0) return default;
+            if (length <= 0) return 0L;
             BufferSpan<T> span = m_World.GetBuffer<T>(handle);
-            if (span.Length < length) return default;
-            return NativeBufferUtil.AsNativeArray<T>(span.UnsafePtr, length);
+            if (span.Length < length) return 0L;
+            return (long)span.UnsafePtr;
         }
     }
 }

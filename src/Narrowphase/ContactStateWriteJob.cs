@@ -1,6 +1,7 @@
 using Unity.Burst;
 using Unity.Collections;
 using Unity.Jobs;
+using Unity.Collections.LowLevel.Unsafe;
 
 namespace Ember.Collision
 {
@@ -11,12 +12,14 @@ namespace Ember.Collision
     [BurstCompile(OptimizeFor = OptimizeFor.Performance)]
     public unsafe struct ContactStateWriteJob : IJobParallelFor
     {
-        [ReadOnly] public NativeArray<ChunkInfo> ChunkInfos;
+        [NativeDisableUnsafePtrRestriction] public long ChunkInfosPtr;
 
-        [ReadOnly] public NativeArray<byte> BodyContactFlags;
+        [NativeDisableUnsafePtrRestriction] public long BodyContactFlagsPtr;
 
-        public void Execute(int chunkIndex)
+        public unsafe void Execute(int chunkIndex)
         {
+            var ChunkInfos = (ChunkInfo*)ChunkInfosPtr;
+            var BodyContactFlags = (byte*)BodyContactFlagsPtr;
             ChunkInfo info = ChunkInfos[chunkIndex];
             if (info.Count <= 0 || info.StatePtr == 0) return;
 

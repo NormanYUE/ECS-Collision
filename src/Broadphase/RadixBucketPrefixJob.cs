@@ -13,23 +13,26 @@ namespace Ember.Collision
     [BurstCompile(OptimizeFor = OptimizeFor.Performance)]
     public struct RadixBucketPrefixJob : IJobParallelFor
     {
-        [ReadOnly] public NativeArray<int> Histogram;
+        [NativeDisableUnsafePtrRestriction] public long HistogramPtr;
 
-        [NativeDisableParallelForRestriction] public NativeArray<int> Offsets;
+        [NativeDisableUnsafePtrRestriction] public long OffsetsPtr;
 
-        [NativeDisableParallelForRestriction] public NativeArray<int> Totals;
+        [NativeDisableUnsafePtrRestriction] public long TotalsPtr;
 
         public int BlockCount;
 
-        public void Execute(int bucket)
+        public unsafe void Execute(int bucket)
         {
+            var Histogram = (int*)HistogramPtr;
+            var Offsets = (int*)OffsetsPtr;
+            var Totals = (int*)TotalsPtr;
             unsafe
             {
                 RadixSort32.BucketLocalPrefix(
                     bucket,
-                    (int*)Histogram.GetUnsafeReadOnlyPtr(),
-                    (int*)Offsets.GetUnsafePtr(),
-                    (int*)Totals.GetUnsafePtr(),
+                    (int*)Histogram,
+                    (int*)Offsets,
+                    (int*)Totals,
                     BlockCount);
             }
         }

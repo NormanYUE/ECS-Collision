@@ -10,22 +10,28 @@ namespace Ember.Collision
     [BurstCompile(OptimizeFor = OptimizeFor.Performance)]
     public struct ContactPairGatherJob : IJobParallelFor
     {
-        [ReadOnly] public NativeArray<CandidatePair> Pairs;
-        [ReadOnly] public NativeArray<Entity> BodyEntities;
-        [ReadOnly] public NativeArray<int> ContactCounts;
-        [ReadOnly] public NativeArray<int> ContactOffsets;
+        [NativeDisableUnsafePtrRestriction] public long PairsPtr;
+        [NativeDisableUnsafePtrRestriction] public long BodyEntitiesPtr;
+        [NativeDisableUnsafePtrRestriction] public long ContactCountsPtr;
+        [NativeDisableUnsafePtrRestriction] public long ContactOffsetsPtr;
 
-        [NativeDisableParallelForRestriction] public NativeArray<ContactPairRecord> Output;
+        [NativeDisableUnsafePtrRestriction] public long OutputPtr;
         public int BodyCount;
+        public int OutputCapacity;
 
-        public void Execute(int pairIndex)
+        public unsafe void Execute(int pairIndex)
         {
+            var Pairs = (CandidatePair*)PairsPtr;
+            var BodyEntities = (Entity*)BodyEntitiesPtr;
+            var ContactCounts = (int*)ContactCountsPtr;
+            var ContactOffsets = (int*)ContactOffsetsPtr;
+            var Output = (ContactPairRecord*)OutputPtr;
             if (ContactCounts[pairIndex] <= 0) return;
             CandidatePair pair = Pairs[pairIndex];
             if (pair.BodyA < 0 || pair.BodyB < 0 || pair.BodyA >= BodyCount || pair.BodyB >= BodyCount) return;
 
             int output = ContactOffsets[pairIndex];
-            if (output < 0 || output >= Output.Length) return;
+            if (output < 0 || output >= OutputCapacity) return;
             Output[output] = ContactPairRecord.Create(BodyEntities[pair.BodyA], BodyEntities[pair.BodyB]);
         }
     }

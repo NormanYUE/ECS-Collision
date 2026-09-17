@@ -27,7 +27,7 @@ namespace Ember.Collision.Tests
             Assert.That(view.IsQueryReady, Is.False);
             Assert.Throws<System.InvalidOperationException>(() =>
             {
-                var snapshot = view.BodyPoses;
+                var snapshot = view.BodyPosesPtr;
             });
         }
 

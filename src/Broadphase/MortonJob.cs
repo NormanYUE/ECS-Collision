@@ -1,6 +1,7 @@
 using Unity.Burst;
 using Unity.Collections;
 using Unity.Jobs;
+using Unity.Collections.LowLevel.Unsafe;
 
 namespace Ember.Collision
 {
@@ -11,22 +12,26 @@ namespace Ember.Collision
     [BurstCompile(OptimizeFor = OptimizeFor.Performance)]
     public struct MortonJob : IJobParallelFor
     {
-        [ReadOnly] public NativeArray<Aabb> BodyBounds;
+        [NativeDisableUnsafePtrRestriction] public long BodyBoundsPtr;
 
         /// <summary>分块归约结果；下标 <see cref="BlockCount"/> 存放全局 AABB。</summary>
-        [ReadOnly] public NativeArray<Aabb> BlockBounds;
+        [NativeDisableUnsafePtrRestriction] public long BlockBoundsPtr;
 
         public int BlockCount;
 
         /// <summary>维度模式，决定参与量化的轴。</summary>
         public CollisionDimension Dimension;
 
-        [NativeDisableParallelForRestriction] public NativeArray<uint> MortonKeys;
+        [NativeDisableUnsafePtrRestriction] public long MortonKeysPtr;
 
-        [NativeDisableParallelForRestriction] public NativeArray<int> BodyOrder;
+        [NativeDisableUnsafePtrRestriction] public long BodyOrderPtr;
 
-        public void Execute(int index)
+        public unsafe void Execute(int index)
         {
+            var BodyBounds = (Aabb*)BodyBoundsPtr;
+            var BlockBounds = (Aabb*)BlockBoundsPtr;
+            var MortonKeys = (uint*)MortonKeysPtr;
+            var BodyOrder = (int*)BodyOrderPtr;
             MortonFrame frame = MortonFrame.From(BlockBounds[BlockCount], Dimension);
             MortonKeys[index] = MortonCoder.Encode(BodyBounds[index], frame);
             BodyOrder[index] = index;

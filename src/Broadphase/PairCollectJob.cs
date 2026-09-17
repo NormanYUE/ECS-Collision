@@ -17,35 +17,43 @@ namespace Ember.Collision
     [BurstCompile(OptimizeFor = OptimizeFor.Performance)]
     public struct PairCollectJob : IJobParallelFor
     {
-        [ReadOnly] public NativeArray<BvhNode> Nodes;
+        [NativeDisableUnsafePtrRestriction] public long NodesPtr;
 
-        [ReadOnly] public NativeArray<Aabb> BodyBounds;
+        [NativeDisableUnsafePtrRestriction] public long BodyBoundsPtr;
 
-        [ReadOnly] public NativeArray<int> SortedOrder;
+        [NativeDisableUnsafePtrRestriction] public long SortedOrderPtr;
 
-        [ReadOnly] public NativeArray<int> PairOffsets;
+        [NativeDisableUnsafePtrRestriction] public long PairOffsetsPtr;
 
-        public NativeArray<int> PairCounts;
+        [NativeDisableUnsafePtrRestriction] public long PairCountsPtr;
 
-        [NativeDisableParallelForRestriction] public NativeArray<int> TraversalStack;
+        [NativeDisableUnsafePtrRestriction] public long TraversalStackPtr;
 
-        [NativeDisableParallelForRestriction] public NativeArray<CandidatePair> Pairs;
+        [NativeDisableUnsafePtrRestriction] public long PairsPtr;
 
         [NativeSetThreadIndex] public int ThreadIndex;
 
         public int Root;
         public int BodyCount;
         public int StackDepth;
+        public int PairCapacity;
 
-        public void Execute(int leafIndex)
+        public unsafe void Execute(int leafIndex)
         {
+            var Nodes = (BvhNode*)NodesPtr;
+            var BodyBounds = (Aabb*)BodyBoundsPtr;
+            var SortedOrder = (int*)SortedOrderPtr;
+            var PairOffsets = (int*)PairOffsetsPtr;
+            var TraversalStack = (int*)TraversalStackPtr;
+            var Pairs = (CandidatePair*)PairsPtr;
+            var PairCounts = (int*)PairCountsPtr;
             if (leafIndex >= BodyCount) return;
 
             int expected = PairCounts[leafIndex];
             if (expected <= 0) return;
 
             int offset = PairOffsets[leafIndex];
-            int limit = Pairs.Length - offset;
+            int limit = PairCapacity - offset;
             if (limit <= 0)
             {
                 PairCounts[leafIndex] = -1;
@@ -57,16 +65,16 @@ namespace Ember.Collision
             unsafe
             {
                 int stackOffset = ThreadIndex * StackDepth;
-                int* stack = (int*)TraversalStack.GetUnsafePtr() + stackOffset;
+                int* stack = (int*)TraversalStack + stackOffset;
 
                 int body = SortedOrder[leafIndex];
                 Aabb bounds = BodyBounds[body];
 
                 var result = BvhBuilder.CollectPairsInto(
-                    (BvhNode*)Nodes.GetUnsafeReadOnlyPtr(), Root, leafIndex, &bounds,
+                    (BvhNode*)Nodes, Root, leafIndex, &bounds,
                     stack, StackDepth,
-                    (int*)SortedOrder.GetUnsafeReadOnlyPtr(),
-                    (CandidatePair*)Pairs.GetUnsafePtr(),
+                    (int*)SortedOrder,
+                    (CandidatePair*)Pairs,
                     offset, limit);
 
                 if (result.Overflow)

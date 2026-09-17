@@ -13,29 +13,37 @@ namespace Ember.Collision
     [BurstCompile(OptimizeFor = OptimizeFor.Performance)]
     public unsafe struct ContactCountJob : IJobParallelFor
     {
-        [ReadOnly] public NativeArray<CandidatePair> Pairs;
+        [NativeDisableUnsafePtrRestriction] public long PairsPtr;
 
-        [ReadOnly] public NativeArray<BodyPose> BodyPoses;
+        [NativeDisableUnsafePtrRestriction] public long BodyPosesPtr;
 
-        [ReadOnly] public NativeArray<Collider> BodyColliders;
+        [NativeDisableUnsafePtrRestriction] public long BodyCollidersPtr;
 
-        [ReadOnly] public NativeArray<CollisionFilter> BodyFilters;
+        [NativeDisableUnsafePtrRestriction] public long BodyFiltersPtr;
 
-        [ReadOnly] public NativeArray<byte> BodyFlags;
+        [NativeDisableUnsafePtrRestriction] public long BodyFlagsPtr;
 
-        [ReadOnly] public NativeArray<float3> Vertices;
+        [NativeDisableUnsafePtrRestriction] public long VerticesPtr;
 
-        [NativeDisableParallelForRestriction] public NativeArray<int> ContactCounts;
+        [NativeDisableUnsafePtrRestriction] public long ContactCountsPtr;
 
         public int BodyCount;
         public int VertexCount;
+        public int PairCapacity;
         public CollisionDimension Dimension;
         public bool SkipStaticPairs;
 
-        public void Execute(int pairIndex)
+        public unsafe void Execute(int pairIndex)
         {
+            var Pairs = (CandidatePair*)PairsPtr;
+            var BodyPoses = (BodyPose*)BodyPosesPtr;
+            var BodyColliders = (Collider*)BodyCollidersPtr;
+            var BodyFilters = (CollisionFilter*)BodyFiltersPtr;
+            var BodyFlags = (byte*)BodyFlagsPtr;
+            var Vertices = (float3*)VerticesPtr;
+            var ContactCounts = (int*)ContactCountsPtr;
             ContactCounts[pairIndex] = 0;
-            if (pairIndex < 0 || pairIndex >= Pairs.Length) return;
+            if (pairIndex < 0 || pairIndex >= PairCapacity) return;
 
             CandidatePair pair = Pairs[pairIndex];
             int bodyA = pair.BodyA;
@@ -46,8 +54,8 @@ namespace Ember.Collision
                     BodyFilters[bodyB], BodyFlags[bodyB], SkipStaticPairs))
                 return;
 
-            float3* vertexPool = VertexCount > 0 && Vertices.IsCreated
-                ? (float3*)Vertices.GetUnsafeReadOnlyPtr()
+            float3* vertexPool = VertexCount > 0 && Vertices != null
+                ? (float3*)Vertices
                 : null;
             if (!NarrowphaseMath.TryBuildManifold(
                 BodyColliders[bodyA], BodyPoses[bodyA],

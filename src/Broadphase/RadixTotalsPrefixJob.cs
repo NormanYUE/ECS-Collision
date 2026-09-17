@@ -12,13 +12,14 @@ namespace Ember.Collision
     [BurstCompile]
     public struct RadixTotalsPrefixJob : IJob
     {
-        [NativeDisableParallelForRestriction] public NativeArray<int> Totals;
+        [NativeDisableUnsafePtrRestriction] public long TotalsPtr;
 
-        public void Execute()
+        public unsafe void Execute()
         {
+            var Totals = (int*)TotalsPtr;
             unsafe
             {
-                RadixSort32.PrefixTotals((int*)Totals.GetUnsafePtr());
+                RadixSort32.PrefixTotals((int*)Totals);
             }
         }
     }

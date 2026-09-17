@@ -22,29 +22,29 @@ namespace Ember.Collision
             {
                 new ContactPairGatherJob
                 {
-                    Pairs = view.CandidatePairArray,
-                    BodyEntities = view.BodyEntityArray,
-                    ContactCounts = view.ContactCountArray,
-                    ContactOffsets = view.ContactOffsetArray,
-                    Output = view.CurrentContactPairArray,
+                    PairsPtr = view.CandidatePairPtr,
+                    BodyEntitiesPtr = view.BodyEntityPtr,
+                    ContactCountsPtr = view.ContactCountPtr,
+                    ContactOffsetsPtr = view.ContactOffsetPtr,
+                    OutputPtr = view.CurrentContactPairPtr,
                     BodyCount = view.BodyCount,
                 }.Schedule(view.CandidatePairCount, 64).Complete();
 
                 new ContactPairSortJob
                 {
-                    Records = view.CurrentContactPairArray,
-                    Scratch = view.ContactPairScratchArray,
+                    RecordsPtr = view.CurrentContactPairPtr,
+                    ScratchPtr = view.ContactPairScratchPtr,
                     Count = currentCount,
                 }.Schedule().Complete();
             }
 
-            NativeArray<ContactPairRecord> previous = view.PreviousContactPairArray;
-            NativeArray<ContactPairRecord> current = view.CurrentContactPairArray;
-            NativeArray<ContactEvent> events = view.ContactEventArray;
+            var previous = (ContactPairRecord*)view.PreviousContactPairPtr;
+            var current = (ContactPairRecord*)view.CurrentContactPairPtr;
+            var events = (ContactEvent*)view.ContactEventPtr;
             int eventCount = ContactEventMath.Merge(
-                (ContactPairRecord*)previous.GetUnsafeReadOnlyPtr(), previousCount,
-                (ContactPairRecord*)current.GetUnsafeReadOnlyPtr(), currentCount,
-                (ContactEvent*)events.GetUnsafePtr(), events.Length);
+                previous, previousCount,
+                current, currentCount,
+                events, view.ContactEventCapacity);
             view.CommitContactEvents(currentCount, eventCount);
         }
     }

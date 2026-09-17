@@ -9,26 +9,29 @@ namespace Ember.Collision
     [BurstCompile(OptimizeFor = OptimizeFor.Performance)]
     public struct ScanBlockJob : IJobParallelFor
     {
-        [ReadOnly] public NativeArray<int> Source;
+        [NativeDisableUnsafePtrRestriction] public long SourcePtr;
 
-        [NativeDisableParallelForRestriction] public NativeArray<int> Destination;
+        [NativeDisableUnsafePtrRestriction] public long DestinationPtr;
 
-        [NativeDisableParallelForRestriction] public NativeArray<int> BlockTotals;
+        [NativeDisableUnsafePtrRestriction] public long BlockTotalsPtr;
 
         public int Count;
         public int BlockSize;
 
-        public void Execute(int block)
+        public unsafe void Execute(int block)
         {
+            var Source = (int*)SourcePtr;
+            var Destination = (int*)DestinationPtr;
+            var BlockTotals = (int*)BlockTotalsPtr;
             unsafe
             {
                 BlockScan.ScanBlock(
-                    (int*)Source.GetUnsafeReadOnlyPtr(),
-                    (int*)Destination.GetUnsafePtr(),
+                    (int*)Source,
+                    (int*)Destination,
                     block,
                     BlockScan.BlockStart(block, BlockSize),
                     BlockScan.BlockEnd(block, BlockSize, Count),
-                    (int*)BlockTotals.GetUnsafePtr());
+                    (int*)BlockTotals);
             }
         }
     }

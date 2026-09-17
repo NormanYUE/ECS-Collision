@@ -1,6 +1,7 @@
 using Unity.Burst;
 using Unity.Collections;
 using Unity.Jobs;
+using Unity.Collections.LowLevel.Unsafe;
 
 namespace Ember.Collision
 {
@@ -12,16 +13,18 @@ namespace Ember.Collision
     [BurstCompile(OptimizeFor = OptimizeFor.Performance)]
     public struct BoundsReduceJob : IJobParallelFor
     {
-        [ReadOnly] public NativeArray<Aabb> BodyBounds;
+        [NativeDisableUnsafePtrRestriction] public long BodyBoundsPtr;
 
         /// <summary>输出：每块 AABB（下标 0..blockCount-1）。</summary>
-        [NativeDisableParallelForRestriction] public NativeArray<Aabb> BlockBounds;
+        [NativeDisableUnsafePtrRestriction] public long BlockBoundsPtr;
 
         public int BodyCount;
         public int BlockSize;
 
-        public void Execute(int block)
+        public unsafe void Execute(int block)
         {
+            var BodyBounds = (Aabb*)BodyBoundsPtr;
+            var BlockBounds = (Aabb*)BlockBoundsPtr;
             int start = block * BlockSize;
             int end = start + BlockSize;
             if (end > BodyCount) end = BodyCount;

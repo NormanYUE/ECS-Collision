@@ -13,26 +13,28 @@ namespace Ember.Collision
     [BurstCompile(OptimizeFor = OptimizeFor.Performance)]
     public struct RadixHistogramJob : IJobParallelFor
     {
-        [ReadOnly] public NativeArray<uint> Keys;
+        [NativeDisableUnsafePtrRestriction] public long KeysPtr;
 
-        [NativeDisableParallelForRestriction] public NativeArray<int> Histogram;
+        [NativeDisableUnsafePtrRestriction] public long HistogramPtr;
 
         public int Count;
         public int BlockSize;
         public int BlockCount;
         public int Shift;
 
-        public void Execute(int block)
+        public unsafe void Execute(int block)
         {
+            var Keys = (uint*)KeysPtr;
+            var Histogram = (int*)HistogramPtr;
             unsafe
             {
                 RadixSort32.HistogramBlock(
-                    (uint*)Keys.GetUnsafeReadOnlyPtr(),
+                    (uint*)Keys,
                     block,
                     RadixSort32.BlockStart(block, BlockSize),
                     RadixSort32.BlockEnd(block, BlockSize, Count),
                     Shift,
-                    (int*)Histogram.GetUnsafePtr(),
+                    (int*)Histogram,
                     BlockCount);
             }
         }

@@ -15,16 +15,16 @@ namespace Ember.Collision
     [BurstCompile(OptimizeFor = OptimizeFor.Performance)]
     public struct PairCountJob : IJobParallelFor
     {
-        [ReadOnly] public NativeArray<BvhNode> Nodes;
+        [NativeDisableUnsafePtrRestriction] public long NodesPtr;
 
-        [ReadOnly] public NativeArray<Aabb> BodyBounds;
+        [NativeDisableUnsafePtrRestriction] public long BodyBoundsPtr;
 
-        [ReadOnly] public NativeArray<int> SortedOrder;
+        [NativeDisableUnsafePtrRestriction] public long SortedOrderPtr;
 
         /// <summary>遍历栈，按线程切片。</summary>
-        [NativeDisableParallelForRestriction] public NativeArray<int> TraversalStack;
+        [NativeDisableUnsafePtrRestriction] public long TraversalStackPtr;
 
-        [NativeDisableParallelForRestriction] public NativeArray<int> PairCounts;
+        [NativeDisableUnsafePtrRestriction] public long PairCountsPtr;
 
         [NativeSetThreadIndex] public int ThreadIndex;
 
@@ -32,19 +32,24 @@ namespace Ember.Collision
         public int BodyCount;
         public int StackDepth;
 
-        public void Execute(int leafIndex)
+        public unsafe void Execute(int leafIndex)
         {
+            var Nodes = (BvhNode*)NodesPtr;
+            var BodyBounds = (Aabb*)BodyBoundsPtr;
+            var SortedOrder = (int*)SortedOrderPtr;
+            var TraversalStack = (int*)TraversalStackPtr;
+            var PairCounts = (int*)PairCountsPtr;
             if (leafIndex >= BodyCount) return;
 
             unsafe
             {
                 int stackOffset = ThreadIndex * StackDepth;
-                int* stack = (int*)TraversalStack.GetUnsafePtr() + stackOffset;
+                int* stack = (int*)TraversalStack + stackOffset;
                 int body = SortedOrder[leafIndex];
                 Aabb bounds = BodyBounds[body];
 
                 var result = BvhBuilder.CountHierarchyOverlaps(
-                    (BvhNode*)Nodes.GetUnsafeReadOnlyPtr(), Root, leafIndex, &bounds, stack, StackDepth);
+                    (BvhNode*)Nodes, Root, leafIndex, &bounds, stack, StackDepth);
 
                 if (result.Overflow)
                 {

@@ -13,15 +13,16 @@ namespace Ember.Collision
     [BurstCompile]
     public struct ScanBlocksJob : IJob
     {
-        [NativeDisableParallelForRestriction] public NativeArray<int> BlockTotals;
+        [NativeDisableUnsafePtrRestriction] public long BlockTotalsPtr;
 
         public int BlockCount;
 
-        public void Execute()
+        public unsafe void Execute()
         {
+            var BlockTotals = (int*)BlockTotalsPtr;
             unsafe
             {
-                BlockScan.PrefixBlockTotals((int*)BlockTotals.GetUnsafePtr(), BlockCount);
+                BlockScan.PrefixBlockTotals((int*)BlockTotals, BlockCount);
             }
         }
     }

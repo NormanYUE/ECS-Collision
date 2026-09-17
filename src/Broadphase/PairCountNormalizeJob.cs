@@ -1,6 +1,7 @@
 using Unity.Burst;
 using Unity.Collections;
 using Unity.Jobs;
+using Unity.Collections.LowLevel.Unsafe;
 
 namespace Ember.Collision
 {
@@ -11,15 +12,17 @@ namespace Ember.Collision
     [BurstCompile(OptimizeFor = OptimizeFor.Performance)]
     public struct PairCountNormalizeJob : IJob
     {
-        public NativeArray<int> PairCounts;
+        [NativeDisableUnsafePtrRestriction] public long PairCountsPtr;
 
-        public NativeArray<int> DiagnosticFlags;
+        [NativeDisableUnsafePtrRestriction] public long DiagnosticFlagsPtr;
 
         public int BodyCount;
         public int StackOverflowSlot;
 
-        public void Execute()
+        public unsafe void Execute()
         {
+            var PairCounts = (int*)PairCountsPtr;
+            var DiagnosticFlags = (int*)DiagnosticFlagsPtr;
             bool overflow = false;
             for (int leafIndex = 0; leafIndex < BodyCount; leafIndex++)
             {

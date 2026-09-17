@@ -34,7 +34,7 @@ namespace Ember.Collision
             .Write<CollisionState>()
             .Write<CollisionWorld>();
 
-        protected override void OnTick(SystemContext ctx)
+        protected override unsafe void OnTick(SystemContext ctx)
         {
             if (!ctx.World.TryGetCollisionWorld(out CollisionWorldView view))
             {
@@ -45,13 +45,13 @@ namespace Ember.Collision
             int bodyCount = view.BodyCount;
             JobHandle clearFlags = new ContactFlagClearJob
             {
-                BodyContactFlags = view.BodyContactFlagArray,
+                BodyContactFlagsPtr = view.BodyContactFlagPtr,
             }.Schedule(bodyCount, 64, default);
 
             int pairCount = view.CandidatePairCount;
             if (pairCount <= 0)
             {
-                ScheduleStateWrite(view, clearFlags).Complete();
+                ScheduleStateWrite(view, clearFlags, view.ChunkCount).Complete();
                 AdvanceDisabledStates(ctx);
                 LastContactCount = 0;
                 view.SetDetectedContactCount(0);
@@ -68,16 +68,16 @@ namespace Ember.Collision
             ScheduleContactCounts(view, config, pairCount, clearFlags)
                 .Complete();
 
-            NativeArray<int> scanTotals = view.ContactScanBlockArray;
-            int exactCount = scanTotals.IsCreated ? math.max(0, scanTotals[scanBlocks]) : 0;
+            var scanTotals = (int*)view.ContactScanBlockPtr;
+            int exactCount = scanTotals != null ? math.max(0, scanTotals[scanBlocks]) : 0;
             int outputLimit = math.min(exactCount, math.max(0, config.MaxContacts));
             view.EnsureContactCapacity(outputLimit);
             view.SetDetectedContactCount(exactCount);
 
             if (exactCount > outputLimit)
             {
-                NativeArray<int> diagnosticFlags = view.DiagnosticFlagArray;
-                diagnosticFlags[CollisionWorld.DiagContactCapacityTruncated] = 1;
+                var truncFlags = (int*)view.DiagnosticFlagPtr;
+                truncFlags[CollisionWorld.DiagContactCapacityTruncated] = 1;
             }
 
             if (outputLimit > 0)
@@ -90,7 +90,7 @@ namespace Ember.Collision
                 ScheduleContactFlagMark(view, pairCount).Complete();
             }
 
-            ScheduleStateWrite(view, default).Complete();
+            ScheduleStateWrite(view, default, view.ChunkCount).Complete();
             AdvanceDisabledStates(ctx);
 
             LastContactCount = outputLimit;
@@ -108,13 +108,13 @@ namespace Ember.Collision
             int scanBlocks = BlockScan.BlockCount(pairCount, CollisionWorldView.ScanBlockSize);
             JobHandle handle = new ContactCountJob
             {
-                Pairs = view.CandidatePairArray,
-                BodyPoses = view.BodyPoseArray,
-                BodyColliders = view.BodyColliderArray,
-                BodyFilters = view.BodyFilterArray,
-                BodyFlags = view.BodyFlagArray,
-                Vertices = view.VertexArray,
-                ContactCounts = view.ContactCountArray,
+                PairsPtr = view.CandidatePairPtr,
+                BodyPosesPtr = view.BodyPosePtr,
+                BodyCollidersPtr = view.BodyColliderPtr,
+                BodyFiltersPtr = view.BodyFilterPtr,
+                BodyFlagsPtr = view.BodyFlagPtr,
+                VerticesPtr = view.VertexPtr,
+                ContactCountsPtr = view.ContactCountPtr,
                 BodyCount = view.BodyCount,
                 VertexCount = view.VertexCount,
                 Dimension = config.Dimension,
@@ -123,23 +123,23 @@ namespace Ember.Collision
 
             handle = new ScanBlockJob
             {
-                Source = view.ContactCountArray,
-                Destination = view.ContactOffsetArray,
-                BlockTotals = view.ContactScanBlockArray,
+                SourcePtr = view.ContactCountPtr,
+                DestinationPtr = view.ContactOffsetPtr,
+                BlockTotalsPtr = view.ContactScanBlockPtr,
                 Count = pairCount,
                 BlockSize = CollisionWorldView.ScanBlockSize,
             }.Schedule(scanBlocks, 1, handle);
 
             handle = new ScanBlocksJob
             {
-                BlockTotals = view.ContactScanBlockArray,
+                BlockTotalsPtr = view.ContactScanBlockPtr,
                 BlockCount = scanBlocks,
             }.Schedule(handle);
 
             return new ScanAddJob
             {
-                Destination = view.ContactOffsetArray,
-                BlockTotals = view.ContactScanBlockArray,
+                DestinationPtr = view.ContactOffsetPtr,
+                BlockTotalsPtr = view.ContactScanBlockPtr,
                 Count = pairCount,
                 BlockSize = CollisionWorldView.ScanBlockSize,
             }.Schedule(scanBlocks, 1, handle);
@@ -153,16 +153,16 @@ namespace Ember.Collision
         {
             return new ContactCollectJob
             {
-                Pairs = view.CandidatePairArray,
-                BodyEntities = view.BodyEntityArray,
-                BodyPoses = view.BodyPoseArray,
-                BodyColliders = view.BodyColliderArray,
-                BodyFilters = view.BodyFilterArray,
-                BodyFlags = view.BodyFlagArray,
-                Vertices = view.VertexArray,
-                ContactCounts = view.ContactCountArray,
-                ContactOffsets = view.ContactOffsetArray,
-                Contacts = view.ContactArray,
+                PairsPtr = view.CandidatePairPtr,
+                BodyEntitiesPtr = view.BodyEntityPtr,
+                BodyPosesPtr = view.BodyPosePtr,
+                BodyCollidersPtr = view.BodyColliderPtr,
+                BodyFiltersPtr = view.BodyFilterPtr,
+                BodyFlagsPtr = view.BodyFlagPtr,
+                VerticesPtr = view.VertexPtr,
+                ContactCountsPtr = view.ContactCountPtr,
+                ContactOffsetsPtr = view.ContactOffsetPtr,
+                ContactsPtr = view.ContactPtr,
                 BodyCount = view.BodyCount,
                 VertexCount = view.VertexCount,
                 OutputLimit = outputLimit,
@@ -175,21 +175,21 @@ namespace Ember.Collision
         {
             return new ContactFlagMarkJob
             {
-                Pairs = view.CandidatePairArray,
-                ContactCounts = view.ContactCountArray,
-                BodyContactFlags = view.BodyContactFlagArray,
+                PairsPtr = view.CandidatePairPtr,
+                ContactCountsPtr = view.ContactCountPtr,
+                BodyContactFlagsPtr = view.BodyContactFlagPtr,
                 PairCount = pairCount,
                 BodyCount = view.BodyCount,
             }.Schedule();
         }
 
-        private static JobHandle ScheduleStateWrite(in CollisionWorldView view, JobHandle dependency)
+        private static JobHandle ScheduleStateWrite(in CollisionWorldView view, JobHandle dependency, int chunkCount)
         {
             return new ContactStateWriteJob
             {
-                ChunkInfos = view.ChunkInfoArray,
-                BodyContactFlags = view.BodyContactFlagArray,
-            }.Schedule(view.ChunkInfoArray.Length, 8, dependency);
+                ChunkInfosPtr = view.ChunkInfoPtr,
+                BodyContactFlagsPtr = view.BodyContactFlagPtr,
+            }.Schedule(chunkCount, 8, dependency);
         }
 
         /// <summary>
@@ -209,10 +209,10 @@ namespace Ember.Collision
             }
         }
 
-        private static void WarnOnDiagnostics(in CollisionWorldView view)
+        private static unsafe void WarnOnDiagnostics(in CollisionWorldView view)
         {
-            NativeArray<int> diagnostics = view.DiagnosticFlagArray;
-            if (!diagnostics.IsCreated) return;
+            var diagnostics = (int*)view.DiagnosticFlagPtr;
+            if (diagnostics == null) return;
             if (diagnostics[CollisionWorld.DiagContactCapacityTruncated] != 0)
             {
                 Debug.LogError(

@@ -12,26 +12,29 @@ namespace Ember.Collision
     [BurstCompile(OptimizeFor = OptimizeFor.Performance)]
     public struct BvhLeafJob : IJobParallelFor
     {
-        [ReadOnly] public NativeArray<Aabb> BodyBounds;
+        [NativeDisableUnsafePtrRestriction] public long BodyBoundsPtr;
 
         /// <summary>Morton 排序后的稠密 body 下标（排序位置 → body）。</summary>
-        [ReadOnly] public NativeArray<int> SortedOrder;
+        [NativeDisableUnsafePtrRestriction] public long SortedOrderPtr;
 
-        [NativeDisableParallelForRestriction] public NativeArray<BvhNode> Nodes;
+        [NativeDisableUnsafePtrRestriction] public long NodesPtr;
 
         public int BodyCount;
 
         /// <summary>叶数组长度（补足到 2 的幂）。</summary>
         public int LeafCapacity;
 
-        public void Execute(int leafIndex)
+        public unsafe void Execute(int leafIndex)
         {
+            var BodyBounds = (Aabb*)BodyBoundsPtr;
+            var SortedOrder = (int*)SortedOrderPtr;
+            var Nodes = (BvhNode*)NodesPtr;
             unsafe
             {
                 BvhBuilder.BuildLeaves(
-                    (BvhNode*)Nodes.GetUnsafePtr(),
-                    (Aabb*)BodyBounds.GetUnsafeReadOnlyPtr(),
-                    (int*)SortedOrder.GetUnsafeReadOnlyPtr(),
+                    (BvhNode*)Nodes,
+                    (Aabb*)BodyBounds,
+                    (int*)SortedOrder,
                     BodyCount,
                     LeafCapacity);
             }
