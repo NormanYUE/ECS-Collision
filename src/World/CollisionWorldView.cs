@@ -1,3 +1,5 @@
+using System;
+using System.Runtime.CompilerServices;
 using Ember.Core;
 using Unity.Collections;
 using Unity.Jobs.LowLevel.Unsafe;
@@ -219,9 +221,14 @@ namespace Ember.Collision
             Grow<BvhNode>(ref state.BvhNodes, nodeCount);
             Grow<int>(ref state.TraversalStack, threadCapacity * TraversalStackDepth);
             Grow<int>(ref state.PairScanBlocks, BlockScan.BlockCount(bodyCount, ScanBlockSize) + 1);
+            // ContactCounts / ContactOffsets 的长度必须跟着 CandidatePairs 的**实际**长度走，
+            // 不能跟着这里请求的容量走：Grow 按 2 的幂取整，实际的候选 pair 容量
+            // （= CollisionWorldView.PairCapacity）可能大于本次请求值，而访问器是按
+            // PairCapacity / PairCapacity + 1 要长度的。
             Grow<CandidatePair>(ref state.CandidatePairs, candidatePairCapacity);
-            Grow<int>(ref state.ContactCounts, candidatePairCapacity);
-            Grow<int>(ref state.ContactOffsets, candidatePairCapacity + 1);
+            int grownPairCapacity = m_World.GetBufferLength<CandidatePair>(state.CandidatePairs);
+            Grow<int>(ref state.ContactCounts, grownPairCapacity);
+            Grow<int>(ref state.ContactOffsets, grownPairCapacity + 1);
             Grow<ContactManifold>(ref state.Contacts, contactCapacity);
             Grow<ContactPairRecord>(ref state.PreviousContactPairs, contactCapacity);
             Grow<ContactPairRecord>(ref state.CurrentContactPairs, contactCapacity);
@@ -271,8 +278,9 @@ namespace Ember.Collision
             ref var state = ref MutableState;
 
             Grow<CandidatePair>(ref state.CandidatePairs, math.max(1, pairCount));
-            Grow<int>(ref state.ContactCounts, math.max(1, pairCount));
-            Grow<int>(ref state.ContactOffsets, math.max(1, pairCount + 1));
+            int grownPairCapacity = m_World.GetBufferLength<CandidatePair>(state.CandidatePairs);
+            Grow<int>(ref state.ContactCounts, grownPairCapacity);
+            Grow<int>(ref state.ContactOffsets, grownPairCapacity + 1);
             Grow<int>(ref state.ContactScanBlocks, BlockScan.BlockCount(math.max(1, pairCount), ScanBlockSize) + 1);
             Grow<ContactManifold>(ref state.Contacts, math.max(16, contactCapacityHint));
 
@@ -800,11 +808,27 @@ namespace Ember.Collision
         /// 作为 Job 容器字段会在调度期被拒绝，在主线程索引会解引用空句柄节点。
         /// 详见 <see cref="NativeBufferUtil"/> 的说明。
         /// </summary>
-        private readonly unsafe long NativePointer<T>(BufferHandle handle, int length) where T : unmanaged
+        private readonly unsafe long NativePointer<T>(
+            BufferHandle handle, int length, [CallerMemberName] string member = null) where T : unmanaged
         {
+            // 长度为 0 是合法请求（当帧没有 body / 没有 pair），调用方不会拿它去调度 Job。
             if (length <= 0) return 0L;
+
+            // 以下是「要了但拿不到」——必须响，不能返回 0。
+            // 返回 0 会让 Job 拿到空指针，在托管路径下退化成无栈的 NullReferenceException，
+            // 拿到指针之前 NativeArray 索引器会替我们报错的那一层就没了。
+            if (handle.IsNull)
+                throw new InvalidOperationException(
+                    $"CollisionWorldView.{member}: buffer handle is not initialized " +
+                    $"(requested {length} x {typeof(T).Name}).");
+
             BufferSpan<T> span = m_World.GetBuffer<T>(handle);
-            if (span.Length < length) return 0L;
+            if (span.Length < length)
+                throw new InvalidOperationException(
+                    $"CollisionWorldView.{member}: buffer too small — requested {length} x {typeof(T).Name}, " +
+                    $"buffer holds {span.Length}. The growth expression in EnsureCapacity / " +
+                    $"EnsurePairDependentCapacity does not match the length this accessor asks for.");
+
             return (long)span.UnsafePtr;
         }
     }
