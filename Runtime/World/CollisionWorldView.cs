@@ -543,7 +543,13 @@ namespace Ember.Collision
             NativePointer<int>(State.DiagnosticFlags, CollisionWorld.DiagnosticSlotCount);
 
         /// <summary>BVH 节点数组。</summary>
-        internal readonly long BvhNodePtr => NativePointer<BvhNode>(State.BvhNodes, State.NodeCapacity);
+        /// <summary>BVH 内部节点数（编辑器可视化用；叶节点紧随其后，不在此计数内）。</summary>
+        public readonly int InternalNodeCount => State.InternalNodeCount;
+
+        /// <summary>
+        /// BVH 节点池指针（编辑器可视化用）。有效节点数 = <see cref="InternalNodeCount"/> + 叶节点。
+        /// </summary>
+        public readonly long BvhNodePtr => NativePointer<BvhNode>(State.BvhNodes, State.NodeCapacity);
 
         /// <summary>诊断计数（长度 = <see cref="CollisionWorld.DiagnosticSlotCount"/>）。</summary>
         internal readonly long DiagnosticPtr =>
@@ -585,7 +591,7 @@ namespace Ember.Collision
             NativePointer<int>(State.TraversalStack, State.ThreadCapacity * TraversalStackDepth);
 
         /// <summary>候选 pair 数组。</summary>
-        internal readonly long CandidatePairPtr =>
+        public readonly long CandidatePairPtr =>
             NativePointer<CandidatePair>(State.CandidatePairs, State.PairCapacity);
 
         /// <summary>每 pair 流形计数。</summary>
@@ -597,7 +603,7 @@ namespace Ember.Collision
             NativePointer<int>(State.ContactOffsets, math.max(1, State.PairCapacity + 1));
 
         /// <summary>接触流形数组。</summary>
-        internal readonly long ContactPtr =>
+        public readonly long ContactPtr =>
             NativePointer<ContactManifold>(State.Contacts, State.ContactCapacity);
 
         internal readonly long PreviousContactPairPtr =>

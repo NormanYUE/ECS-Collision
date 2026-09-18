@@ -4,6 +4,34 @@ All notable changes to Ember Collision.
 
 [English](CHANGELOG_EN.md)
 
+## [1.0.5] — 新增碰撞调试窗口与场景可视化
+
+### Added
+
+- **`Ember/Collision/调试窗口`：开关各图层，并显示宽相 / 窄相计数与溢出诊断。**
+
+  计数面板列碰撞体数、分块数、BVH 内部节点、候选 pair、接触流形、检出接触、接触事件，
+  以及容量溢出计数。body 数与 pair 数对不上说明宽相没覆盖；pair 有而接触为 0 说明
+  窄相被过滤掉了；溢出计数非零说明容量不足、部分碰撞已被丢弃。
+
+- **场景视图可视化**：
+
+  | 图层 | 内容 |
+  | --- | --- |
+  | 碰撞体形状 | 按 body 池的 `BodyPose` + `Collider` 画：圆 / 2D 盒 / 2D 胶囊 / 2D 多边形 / 球 / 3D 盒 / 3D 胶囊 |
+  | BVH | 内部节点包围盒，按深度渐隐 |
+  | 宽相候选 pair | 按 pair 两端 body 的位置连线 |
+  | 接触 | 接触点 + 法线（长度可调） |
+
+  画的是求解用的同一份内存（直接读 body 池 / BVH / pair / contact 指针），
+  不存在「调试副本与实际不一致」。
+
+### Changed
+
+- `CollisionWorldView` 新增公开只读访问器：`BvhNodePtr`、`CandidatePairPtr`、
+  `ContactPtr`、`InternalNodeCount`。原先它们是 internal，编辑器侧取不到。
+- `Ember.Collision.csproj` 排除 `Editor/**`（Editor 只由 Unity 编译，csproj 无 UnityEditor 引用）。
+
 ## [1.0.4] — 包仓库迁移到 ECS-Collision.git
 
 ### Changed

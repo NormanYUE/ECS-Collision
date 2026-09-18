@@ -1,0 +1,22 @@
+{
+    "name": "Ember.Collision.Editor",
+    "rootNamespace": "Ember.Collision.Editor",
+    "references": [
+        "Ember.Runtime",
+        "Ember.Collision.Runtime",
+        "Unity.Mathematics"
+    ],
+    "includePlatforms": [
+        "Editor"
+    ],
+    "excludePlatforms": [],
+    "allowUnsafeCode": true,
+    "overrideReferences": true,
+    "precompiledReferences": [
+        "Ember.dll"
+    ],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}

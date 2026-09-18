@@ -1,6 +1,6 @@
 {
   "name": "com.ember.collision",
-  "version": "1.0.4",
+  "version": "1.0.5",
   "displayName": "Ember Collision",
   "unity": "2022.3",
   "description": "Collision package for the Ember ECS framework. Burst-compiled BVH broadphase with Morton-coded radix sort, narrowphase contact manifold generation, collision filters and contact events. All state lives in World-managed buffers.",

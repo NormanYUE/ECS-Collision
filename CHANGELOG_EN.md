@@ -4,6 +4,37 @@ All notable changes to Ember Collision.
 
 [中文](CHANGELOG.md)
 
+## [1.0.5] — Collision debug window and scene visualization
+
+### Added
+
+- **`Ember/Collision/调试窗口` (Debug Window): per-layer toggles plus broadphase/narrowphase counts
+  and overflow diagnostics.**
+
+  The panel lists body count, chunk count, BVH internal nodes, candidate pairs, contact manifolds,
+  detected contacts, contact events, and the capacity-overflow counter. Bodies but no pairs means
+  the broadphase is not covering them; pairs but no contacts means the narrowphase filtered them;
+  a non-zero overflow counter means capacity is short and collisions are being dropped.
+
+- **Scene view visualization**:
+
+  | Layer | Content |
+  | --- | --- |
+  | Collider shapes | drawn from the body pool's `BodyPose` + `Collider`: circle / box2D / capsule2D / polygon2D / sphere / box / capsule |
+  | BVH | internal node bounds, fading with depth |
+  | Candidate pairs | a line between the two bodies of each pair |
+  | Contacts | contact points plus normals (adjustable length) |
+
+  Drawn straight from the same memory the solver uses (body pool / BVH / pair / contact pointers),
+  so there is no debug copy that can drift from the real state.
+
+### Changed
+
+- `CollisionWorldView` gained public read-only accessors: `BvhNodePtr`, `CandidatePairPtr`,
+  `ContactPtr`, `InternalNodeCount`. They were internal, which put them out of reach for editor code.
+- `Ember.Collision.csproj` now excludes `Editor/**` (editor code is compiled by Unity only; the csproj
+  has no UnityEditor reference).
+
 ## [1.0.4] — Package repository moved to ECS-Collision.git
 
 ### Changed

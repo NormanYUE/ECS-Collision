@@ -11,11 +11,11 @@
         <EmberFrameworkDir Condition="'$(EmberFrameworkDir)' == ''">$(MSBuildThisFileDirectory)../Ember.Framework</EmberFrameworkDir>
         <EmberRuntimeDll Condition="'$(EmberRuntimeDll)' == ''">$(MSBuildThisFileDirectory)../Ember.Package/Runtime/Ember.dll</EmberRuntimeDll>
         <EmberGeneratorDll Condition="'$(EmberGeneratorDll)' == ''">$(MSBuildThisFileDirectory)../Ember.Package/RoslynAnalyzers/Ember.Generator.dll</EmberGeneratorDll>
-        <!-- tests/ 是独立测试工程，必须从默认通配项整体排除：只写 Compile Remove 时，
+        <!-- tests/ 与 Editor/ 都要从默认通配项整体排除（Editor/ 只由 Unity 侧编译，csproj 没有 UnityEditor 引用）：只写 Compile Remove 时，
              其文件仍留在 None 里并进入 CandidateAssemblyFiles，而 AssemblySearchPaths
              的顺序是 {CandidateAssemblyFiles};{HintPathFromItem}，于是 Reference 会命中
              tests 输出目录里的旧 DLL，HintPath 形同虚设。 -->
-        <DefaultItemExcludes>$(DefaultItemExcludes);tests/**</DefaultItemExcludes>
+        <DefaultItemExcludes>$(DefaultItemExcludes);tests/**;Editor/**</DefaultItemExcludes>
     </PropertyGroup>
 
     <ItemGroup>
