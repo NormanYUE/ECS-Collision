@@ -4,6 +4,27 @@ All notable changes to Ember Collision.
 
 [中文](CHANGELOG.md)
 
+## [1.0.6] — Scene gizmo anti-corruption fix
+
+### Fixed
+
+- **Intermittent full-screen garbling in the Scene view (draw batches polluted by bad
+  coordinates and GL emitted on non-Repaint events).**
+
+  `SceneView.duringSceneGui` fires for Layout / mouse events as well, and the hardcoded
+  `EventType.Repaint` in `SphereHandleCap` and friends does not check the current event —
+  GL emitted outside the repaint pass corrupts the Scene view. The gizmo drawer now gates
+  on Repaint at the entry point.
+
+  All coordinates are finite-checked before entering a batch: BVH internal nodes are
+  initialized with `Aabb.Empty` (±Infinity), and unmerged nodes or NaN poses / contact
+  points would garble the whole screen — bad entries are now skipped per item instead of
+  poisoning the batch.
+
+- **Broken references in the test project**: `Ember.Collision.Tests` no longer references
+  the retired `Ember.Core.Package` or `libs/`; it uses `ProjectReference` and `Libs~`,
+  so opening the repo in an IDE (Rider) no longer reports reference errors.
+
 ## [1.0.5] — Collision debug window and scene visualization
 
 ### Added

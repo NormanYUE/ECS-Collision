@@ -4,6 +4,23 @@ All notable changes to Ember Collision.
 
 [English](CHANGELOG_EN.md)
 
+## [1.0.6] — 场景 Gizmos 防花屏
+
+### Fixed
+
+- **Scene 视图偶发整屏花屏（绘制批次被坏坐标 / 非 Repaint 事件 GL 污染）。**
+
+  `SceneView.duringSceneGui` 对 Layout / 鼠标事件同样触发，而 `SphereHandleCap` 等
+  硬编码 `EventType.Repaint` 不区分当前事件，在非 Repaint 事件里发 GL 直接污染
+  Scene 视图渲染。Gizmo 绘制器入口现已加 Repaint 门控。
+
+  同时所有坐标入批前做有限性检查：BVH 内部节点以 `Aabb.Empty`（±Infinity）初始化，
+  未合并完的节点、NaN 体姿 / 接触点一旦入批即整屏花屏——坏条按条丢弃，不再拖垮整批。
+
+- **测试工程断引用修复**：`Ember.Collision.Tests` 不再引用已废弃的
+  `Ember.Core.Package` 与 `libs/`，改用 `ProjectReference` 与 `Libs~`，
+  IDE（Rider）打开不再报引用错误。
+
 ## [1.0.5] — 新增碰撞调试窗口与场景可视化
 
 ### Added
