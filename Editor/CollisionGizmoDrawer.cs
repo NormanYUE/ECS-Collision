@@ -30,6 +30,9 @@ namespace Ember.Collision.Editor
 
         private static void OnSceneGui(SceneView view)
         {
+            // 只在 Repaint 事件绘制：duringSceneGui 对 Layout/鼠标事件同样触发，
+            // 此时发 GL（HandleCap 硬编码 Repaint 不区分事件）会污染 Scene 视图渲染（花屏）。
+            if (Event.current.type != EventType.Repaint) return;
             if (!Application.isPlaying) return;
             if (!CollisionDebugSettings.DrawShapes && !CollisionDebugSettings.DrawBvh
                 && !CollisionDebugSettings.DrawContacts && !CollisionDebugSettings.DrawPairs) return;
@@ -67,6 +70,11 @@ namespace Ember.Collision.Editor
         {
             ShapeParams parameters = collider.Params;
             float3 center = pose.TransformPoint(parameters.Center);
+
+            // 池化槽位可能带未初始化 / NaN 数据：一条坏线会污染整个 Scene 绘制批次，逐条丢弃。
+            if (!IsFinite(center) || !IsFinite(parameters.Center) || !IsFinite(parameters.Extents)
+                || !float.IsFinite(parameters.Radius) || !float.IsFinite(parameters.HalfHeight)
+                || !IsFinite(parameters.CapsuleAxis)) return;
 
             switch (collider.Type) {
                 case ShapeType.Circle:
@@ -223,7 +231,10 @@ namespace Ember.Collision.Editor
                 CandidatePair pair = pairs[i];
                 if (pair.BodyA < 0 || pair.BodyB < 0 || pair.BodyA >= bodyCount || pair.BodyB >= bodyCount) continue;
 
-                Handles.DrawLine(ToVector3(poses[pair.BodyA].Position), ToVector3(poses[pair.BodyB].Position));
+                float3 posA = poses[pair.BodyA].Position;
+                float3 posB = poses[pair.BodyB].Position;
+                if (!IsFinite(posA) || !IsFinite(posB)) continue;
+                Handles.DrawLine(ToVector3(posA), ToVector3(posB));
             }
         }
 
@@ -243,8 +254,10 @@ namespace Ember.Collision.Editor
                 if (manifold.Count <= 0) continue;
 
                 float3 normal = math.normalizesafe(manifold.Normal);
+                if (!IsFinite(normal)) continue;
                 for (int p = 0; p < manifold.Count; p++) {
                     ContactPoint point = manifold.GetPoint(p);
+                    if (!IsFinite(point.Position)) continue;
                     var origin = ToVector3(point.Position);
 
                     Handles.color = ContactColor;
@@ -260,8 +273,14 @@ namespace Ember.Collision.Editor
         {
             float3 center = bounds.Center;
             float3 size = bounds.Extents * 2f;
+            // 内部节点以 Aabb.Empty（±Infinity，Center 为 NaN）初始化后自底向上合并，
+            // 未合并完的节点（或 NaN 体姿污染）入批即花屏：非有限包围盒一律不画。
+            if (!IsFinite(center) || !IsFinite(size)) return;
             Handles.DrawWireCube(ToVector3(center), ToVector3(size));
         }
+
+        private static bool IsFinite(float3 value) =>
+            float.IsFinite(value.x) && float.IsFinite(value.y) && float.IsFinite(value.z);
 
         #endregion
 
