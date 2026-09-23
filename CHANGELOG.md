@@ -4,6 +4,55 @@ All notable changes to Ember Collision.
 
 [English](CHANGELOG_EN.md)
 
+## [1.0.15] — 修复 BVH 叶层构建的 O(n²)（宽相 3~13 倍加速）
+
+### Fixed
+
+- **`BvhLeafJob` 每次执行都重建「整张」叶数组，导致宽相构建退化成 O(leafCapacity²)。**
+
+  ```csharp
+  public unsafe void Execute(int leafIndex)   // leafIndex 完全没被用到
+  {
+      BvhBuilder.BuildLeaves(nodes, bounds, order, BodyCount, LeafCapacity);  // 写全部 leafCapacity 个叶
+  }
+  ```
+  而该 Job 是用 `Schedule(leafCapacity, 64)` 派发的 —— 于是变成
+  **leafCapacity 次执行 × 每次 leafCapacity 个叶**。leafCapacity = 2048 时是 **419 万次叶写入**
+  （= 对 1133 个 body 做 4095 节点的工作）。
+
+  **输出仍然是正确的**：每次执行都写出同样的正确结果，是幂等的。所以这个 bug 只表现为慢，
+  编译门、单测、结果断言全部抓不到 —— 它是**靠实测**发现的（见下）。
+
+  修法：抽出 `BvhBuilder.BuildLeafAt(nodes, bounds, order, bodyCount, leafIndex)` 做单格写入，
+  `BuildLeaves` 改为循环调用它（对外语义不变），`BvhLeafJob.Execute` 只写自己那一格。
+
+- 顺带全包审计：其余 15 个 `IJobParallelFor` 均在方法体里正确使用自己的下标，
+  **只有 `BvhLeafJob` 一处**是「并行分发 + 调用写整张数组的辅助函数」这个病征。
+
+### Performance
+
+实测（Samples Sample12，关闭 deep profiling；同一探针、同一粒度的前后对照）：
+
+| units | bodies | leafCapacity | 修复前 SIM | 修复后 SIM | 提速 |
+| --- | --- | --- | --- | --- | --- |
+| 700 | 818 | 1024 | 2.477 ms | **1.063 ms** | 2.33× |
+| 950 | 1049 | 2048 | 4.508 ms | **1.427 ms** | 3.16× |
+| 1000 | 1133 | 2048 | 4.857 ms | **1.489 ms** | 3.26× |
+
+**每 body 成本从 2.97 → 4.30 → 4.57 µs（跨 2 的幂跳变）变为恒定 1.30–1.36 µs** ——
+「2 的幂悬崖」消失，这正是 O(leafCapacity²) 的指纹：`leafCapacity = nextPow2(bodyCount)`
+每翻一倍，叶层工作量变成 4 倍。
+
+系统级（1000 单位）：`CollisionBroadphaseSystem` **3.936 → 0.305 ms（12.9×）**，
+碰撞包合计 4.076 → **0.460 ms**，占整个 sim tick 从 81% 降到 33%。
+
+### 测试与限制
+
+- 新增 `BuildLeafAt_WritesExactlyOneSlot`：断言单次调用**只写一格**、且乱序写入等价于批量写入。
+- **但它抓不到原 bug**：原 bug 在 Job 接线，而 CLI 测试只能覆盖纯函数（`NativeArray` / Job
+  无法在纯 CLI 下分配，Ember 框架自身测试同此约定）。这类「接线上写错、结果却仍然正确」的缺陷
+  **只能靠宿主侧实测**发现。本条的回归防线是上面那张实测表，不是单测。
+
 ## [1.0.14] — 消除流水线同步：宽相 / 窄相各只停一次
 
 ### Performance

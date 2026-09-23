@@ -201,6 +201,81 @@ namespace Ember.Collision.Tests
             });
         }
 
+        [TestCase(1)]
+        [TestCase(5)]
+        [TestCase(33)]
+        [TestCase(64)]
+        [TestCase(100)]
+        public void BuildLeafAt_WritesExactlyOneSlot(int count)
+        {
+            // 并行叶作业是按叶分发的，所以「写单叶」必须是 O(1) 且与调用顺序无关。
+            //
+            // 1.0.15 之前 BvhLeafJob.Execute 调的是写整张数组的 BuildLeaves：
+            // 派发 leafCapacity 次 × 每次重建 leafCapacity 个叶 = O(leafCapacity²)。
+            // 输出仍然正确（幂等，每次写同样的结果），所以它只表现为慢、测不出。
+            // 因此这里必须断言「只动了一格」，而不只是「结果对」。
+            WithTree(count, (nodes, bounds, order, scratch, stack, leafCapacity, root) =>
+            {
+                for (int i = 0; i < count; i++)
+                    bounds[i] = Aabb.FromCenterExtents(new float3(i * 0.5f, 0f, 0f), new float3(1f));
+
+                BvhBuilder.BuildLeaves(nodes, bounds, order, count, leafCapacity);
+                var reference = new BvhNode[leafCapacity];
+                for (int i = 0; i < leafCapacity; i++) reference[i] = nodes[i];
+
+                BvhNode sentinel = new BvhNode
+                {
+                    Bounds = Aabb.Empty,
+                    Left = int.MinValue,
+                    Right = int.MinValue,
+                    MinLeaf = int.MinValue,
+                    MaxLeaf = int.MinValue,
+                };
+
+                // 逐格单独调用：只允许改动自己那一格
+                for (int target = 0; target < leafCapacity; target++)
+                {
+                    for (int i = 0; i < leafCapacity; i++) nodes[i] = sentinel;
+                    BvhBuilder.BuildLeafAt(nodes, bounds, order, count, target);
+
+                    for (int i = 0; i < leafCapacity; i++)
+                    {
+                        if (i == target)
+                        {
+                            Assert.That(nodes[i].MinLeaf, Is.EqualTo(reference[i].MinLeaf), $"BuildLeafAt({target}) 没写对自身");
+                            Assert.That(nodes[i].MaxLeaf, Is.EqualTo(reference[i].MaxLeaf), $"BuildLeafAt({target}) 没写对自身");
+                            Assert.That(nodes[i].Right, Is.EqualTo(reference[i].Right), $"BuildLeafAt({target}) 没写对自身");
+                        }
+                        else
+                        {
+                            Assert.That(nodes[i].MaxLeaf, Is.EqualTo(int.MinValue),
+                                $"BuildLeafAt({target}) 改动了第 {i} 格：单次调用必须只写一格，否则并行分发下会退化成 O(leafCapacity²)");
+                        }
+                    }
+                }
+
+                // 乱序逐格写入 == 批量写入
+                var shuffled = new int[leafCapacity];
+                for (int i = 0; i < leafCapacity; i++) shuffled[i] = i;
+                var random = new System.Random(101 + count);
+                for (int i = leafCapacity - 1; i > 0; i--)
+                {
+                    int j = random.Next(i + 1);
+                    (shuffled[i], shuffled[j]) = (shuffled[j], shuffled[i]);
+                }
+
+                for (int i = 0; i < leafCapacity; i++) nodes[i] = sentinel;
+                for (int i = 0; i < leafCapacity; i++)
+                    BvhBuilder.BuildLeafAt(nodes, bounds, order, count, shuffled[i]);
+
+                for (int i = 0; i < leafCapacity; i++)
+                {
+                    Assert.That(nodes[i].MinLeaf, Is.EqualTo(reference[i].MinLeaf), $"乱序写入后第 {i} 格不一致");
+                    Assert.That(nodes[i].MaxLeaf, Is.EqualTo(reference[i].MaxLeaf), $"乱序写入后第 {i} 格不一致");
+                }
+            });
+        }
+
         private static void RunRandomScene(int count, int seed, float spacing, float radius)
         {
             var random = new System.Random(seed);

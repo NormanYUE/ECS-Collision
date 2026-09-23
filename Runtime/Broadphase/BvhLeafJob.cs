@@ -29,15 +29,9 @@ namespace Ember.Collision
             var BodyBounds = (Aabb*)BodyBoundsPtr;
             var SortedOrder = (int*)SortedOrderPtr;
             var Nodes = (BvhNode*)NodesPtr;
-            unsafe
-            {
-                BvhBuilder.BuildLeaves(
-                    (BvhNode*)Nodes,
-                    (Aabb*)BodyBounds,
-                    (int*)SortedOrder,
-                    BodyCount,
-                    LeafCapacity);
-            }
+            // 只写自己那一格。绝不能在这里调 BvhBuilder.BuildLeaves——
+            // 那是「写整张数组」的入口，在并行分发下会退化成 O(leafCapacity²)（见 1.0.15）。
+            BvhBuilder.BuildLeafAt((BvhNode*)Nodes, (Aabb*)BodyBounds, (int*)SortedOrder, BodyCount, leafIndex);
         }
     }
 }

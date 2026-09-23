@@ -4,6 +4,62 @@ All notable changes to Ember Collision.
 
 [中文](CHANGELOG.md)
 
+## [1.0.15] — fix O(n^2) leaf construction in the BVH (3-13x faster broad phase)
+
+### Fixed
+
+- **`BvhLeafJob` rebuilt the *entire* leaf array on every execution, degrading the broad phase to
+  O(leafCapacity^2).**
+
+  ```csharp
+  public unsafe void Execute(int leafIndex)   // leafIndex was never used
+  {
+      BvhBuilder.BuildLeaves(nodes, bounds, order, BodyCount, LeafCapacity);  // writes all leafCapacity leaves
+  }
+  ```
+  The job is dispatched with `Schedule(leafCapacity, 64)`, so this became **leafCapacity
+  executions x leafCapacity leaves**. At leafCapacity = 2048 that is **4.19 million leaf writes**
+  (4095 nodes worth of work for 1133 bodies).
+
+  **The output was still correct**: every execution wrote the same correct result, so the job was
+  idempotent. The bug therefore only showed up as slowness - the compile gate, the unit tests and
+  the result assertions could not see it. It was found by **measurement** (see below).
+
+  Fix: extracted `BvhBuilder.BuildLeafAt(nodes, bounds, order, bodyCount, leafIndex)` for the
+  single-slot write, `BuildLeaves` now loops over it (same external semantics), and
+  `BvhLeafJob.Execute` writes only its own slot.
+
+- Audited the rest of the package: all other 15 `IJobParallelFor` jobs use their own index
+  correctly inside the method body. `BvhLeafJob` was the only instance of the
+  "parallel dispatch + call a whole-array helper" pattern.
+
+### Performance
+
+Measured on Samples Sample12 with deep profiling OFF, same probe and granularity before/after:
+
+| units | bodies | leafCapacity | before | after | speedup |
+| --- | --- | --- | --- | --- | --- |
+| 700 | 818 | 1024 | 2.477 ms | **1.063 ms** | 2.33x |
+| 950 | 1049 | 2048 | 4.508 ms | **1.427 ms** | 3.16x |
+| 1000 | 1133 | 2048 | 4.857 ms | **1.489 ms** | 3.26x |
+
+**Cost per body went from 2.97 -> 4.30 -> 4.57 us (a jump at the power of two) to a constant
+1.30-1.36 us** - the "power-of-two cliff" is gone, which is the fingerprint of O(leafCapacity^2):
+`leafCapacity = nextPow2(bodyCount)`, so every doubling quadrupled the leaf-layer work.
+
+System level (1000 units): `CollisionBroadphaseSystem` **3.936 -> 0.305 ms (12.9x)**, the whole
+collision package 4.076 -> **0.460 ms**, and its share of the sim tick dropped from 81% to 33%.
+
+### Testing and limits
+
+- New `BuildLeafAt_WritesExactlyOneSlot` asserts that a single call writes **exactly one slot** and
+  that shuffled per-slot writes equal a batch write.
+- **It would not have caught the original bug**: that bug lived in the job wiring, and the CLI tests
+  can only cover pure functions (`NativeArray` / jobs cannot be allocated under plain CLI - the same
+  convention Ember's own tests use). This class of defect - wiring written wrong while the result
+  stays correct - is only reachable by host-side measurement. The regression guard for this entry is
+  the table above, not a unit test.
+
 ## [1.0.14] — pipeline sync removal: one main-thread wait per phase
 
 ### Performance

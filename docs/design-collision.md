@@ -96,7 +96,10 @@ Job 只做薄包装。原因：纯 .NET CLI 无法分配 `NativeArray`，
 
 ---
 
-## 5. 已修复的真实缺陷（由测试暴露）
+## 5. 已修复的真实缺陷
+
+> 大部分由纯逻辑单测暴露；**最后一条是靠宿主侧实测发现的**——它输出正确、只是慢，
+> 单测与结果断言都抓不到，这也印证了「Job 接线不在 CLI 覆盖范围内」这个已知盲区。
 
 1. **Shepperd 四元数分量顺序错乱**：`FromOrthonormalBasis` 把 `(w,x,y,z)` 当 `(x,y,z,w)` 构造，
    解出的旋转被完全打乱。由轴角扫描测试（覆盖 4 个分支）捕获。
@@ -107,6 +110,23 @@ Job 只做薄包装。原因：纯 .NET CLI 无法分配 `NativeArray`，
 4. **`EnsureCapacity` 提前返回**：初始化后直接 return，永不扩容。
 5. **`RootIndex` 依赖 Job 输出**：主线程读不到。改用解析解 `2 * leafCapacity - 2`，
    顺带省掉一次流水线同步。
+
+6. **`BvhLeafJob` 每次执行重建整张叶数组 → 宽相 O(leafCapacity²)**（1.0.15 修复）。
+   `Execute(int leafIndex)` 拿到下标却没用，直接调了写整张数组的 `BuildLeaves`；
+   而该 Job 以 `Schedule(leafCapacity, 64)` 派发，于是变成「leafCapacity 次执行 × 每次
+   leafCapacity 个叶」。因为每次执行都写出同样的正确结果（幂等），
+   **编译门、单测、结果断言全部通过**，只在实测里表现为「每 body 成本随 2 的幂阶梯跳变」。
+
+   实测指纹（Sample12，关闭 deep profiling）：
+
+   | bodies | leafCapacity | 每 body 成本 |
+   | --- | --- | --- |
+   | 818 | 1024 | 2.97 µs |
+   | 1049 | 2048 | **4.30 µs** ← 跨 2 的幂 |
+   | 1133 | 2048 | 4.57 µs |
+
+   修复后恒定 1.30–1.36 µs；宽相 3.936 → 0.305 ms（12.9×）。
+   同时全包审计了其余 15 个 `IJobParallelFor`，只有这一处是「并行分发 + 写整张数组」。
 
 ---
 

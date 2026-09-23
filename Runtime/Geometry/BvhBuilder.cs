@@ -37,7 +37,41 @@ namespace Ember.Collision
             }
         }
 
-        /// <summary>构造叶节点（含排序位置与包围盒）。</summary>
+        /// <summary>
+        /// 写<b>单个</b>叶槽位（真实叶或补位空叶）。
+        ///
+        /// 单独拆出来是因为并行调度是按叶分发的：<see cref="BuildLeaves"/> 是「写整张数组」的批量入口，
+        /// 若在并行 Job 里调用它，就会变成「派发 leafCapacity 次 × 每次重建 leafCapacity 个叶」的
+        /// O(leafCapacity²) 行为——输出仍然是正确的（幂等），所以这类错误只表现为慢，不会被测出来。
+        /// </summary>
+        public static unsafe void BuildLeafAt(
+            BvhNode* nodes, Aabb* bounds, int* order, int bodyCount, int leafIndex)
+        {
+            if (leafIndex < bodyCount)
+            {
+                int body = order[leafIndex];
+                nodes[leafIndex] = new BvhNode
+                {
+                    Bounds = bounds[body],
+                    Left = leafIndex,
+                    Right = -1,
+                    MinLeaf = leafIndex,
+                    MaxLeaf = leafIndex,
+                };
+                return;
+            }
+
+            nodes[leafIndex] = new BvhNode
+            {
+                Bounds = Aabb.Empty,
+                Left = -1,
+                Right = -1,
+                MinLeaf = int.MaxValue,
+                MaxLeaf = -1,
+            };
+        }
+
+        /// <summary>构造叶节点（含排序位置与包围盒）。串行批量入口。</summary>
         public static unsafe void BuildLeaves(
             BvhNode* nodes,
             Aabb* bounds,
@@ -45,30 +79,8 @@ namespace Ember.Collision
             int bodyCount,
             int leafCapacity)
         {
-            for (int i = 0; i < bodyCount; i++)
-            {
-                int body = order[i];
-                nodes[i] = new BvhNode
-                {
-                    Bounds = bounds[body],
-                    Left = i,
-                    Right = -1,
-                    MinLeaf = i,
-                    MaxLeaf = i,
-                };
-            }
-
-            for (int i = bodyCount; i < leafCapacity; i++)
-            {
-                nodes[i] = new BvhNode
-                {
-                    Bounds = Aabb.Empty,
-                    Left = -1,
-                    Right = -1,
-                    MinLeaf = int.MaxValue,
-                    MaxLeaf = -1,
-                };
-            }
+            for (int i = 0; i < leafCapacity; i++)
+                BuildLeafAt(nodes, bounds, order, bodyCount, i);
         }
 
         /// <summary>
