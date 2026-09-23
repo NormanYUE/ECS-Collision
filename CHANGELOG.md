@@ -4,6 +4,36 @@ All notable changes to Ember Collision.
 
 [English](CHANGELOG_EN.md)
 
+## [1.0.12] — 查询热路径优化：单例只解析一次 + 节点零拷贝
+
+### Performance
+
+- **`OverlapAabb` / `RaycastAabb` 每次查询都要重新解析近十个属性。**
+
+  `CollisionWorldView.State` 是 `World.GetComponent<CollisionWorld>(owner)` 的
+  **按值拷贝**；而每个 `xxxPtr` 访问器除了再拷一次整块状态，还要 `GetBuffer` 一次。
+  一次 LBVH 查询会用到 `IsQueryReady / BodyCount / BvhNodePtr / SortedOrderPtr /
+  BodyEntityPtr / BodyFilterPtr / BodyFlagPtr / TraversalStackPtr / LeafCapacity`
+  近十个属性，于是解析开销盖过了遍历本身。
+
+  实测（deep profile，126 次查询 / 帧）：每个 `get_*Ptr()` 单次 2.6–3.6 µs。
+  现在两个入口各自**只解析一次**状态快照，再从该快照取全部 buffer 指针。
+
+- **BVH 节点按 48 字节值拷贝，被降级成 `memcpy`。**
+
+  `BvhNode node = nodes[nodeIndex];` 每次节点访问都复制整个结构体。
+  实测 `String.memcpy` 52,912 次 / 4.86 ms，与 `Aabb.Overlaps` 的 52,786 次
+  （= 节点访问次数）几乎 1:1。
+
+  改为 `ref readonly BvhNode node = ref nodes[nodeIndex];` 后不再产生拷贝
+  （`BvhBuilder` 的遍历早就是 `ref`，只有这两个宿主侧入口是漏网的）。
+
+### 说明
+
+- 两项都只影响宿主侧查询热路径，**不改变任何查询语义与结果**。
+- 查询总耗时的大头仍取决于**调用频率**：单次查询要遍历的节点数与查询盒覆盖范围相关，
+  按实体、按帧逐个发查询的用法应自己做错峰与预算。
+
 ## [1.0.11] — 矩形 Gizmo 修成真正的矩形（蝴蝶结 → 四边环）
 
 ### Fixed

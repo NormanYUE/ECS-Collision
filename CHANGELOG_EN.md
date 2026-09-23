@@ -4,6 +4,41 @@ All notable changes to Ember Collision.
 
 [中文](CHANGELOG.md)
 
+## [1.0.12] — query hot path: resolve the singleton once, zero-copy node reads
+
+### Performance
+
+- **`OverlapAabb` / `RaycastAabb` re-resolved roughly ten properties on every query.**
+
+  `CollisionWorldView.State` is a **by-value copy** of
+  `World.GetComponent<CollisionWorld>(owner)`, and each `xxxPtr` accessor takes another copy of
+  the whole state plus a `GetBuffer`. A single LBVH query touches about ten of them
+  (`IsQueryReady / BodyCount / BvhNodePtr / SortedOrderPtr / BodyEntityPtr / BodyFilterPtr /
+  BodyFlagPtr / TraversalStackPtr / LeafCapacity`), so the resolution cost outweighed the
+  traversal itself.
+
+  Measured under deep profile (126 queries/frame): each `get_*Ptr()` cost 2.6-3.6 us per call.
+  Both entry points now resolve the state snapshot **once** and take every buffer pointer from
+  that snapshot.
+
+- **BVH nodes were copied by value (48 bytes), which lowered to `memcpy`.**
+
+  `BvhNode node = nodes[nodeIndex];` copied the whole struct on every node visit. Measured:
+  `String.memcpy` 52,912 calls / 4.86 ms against 52,786 `Aabb.Overlaps` calls (i.e. node
+  visits) - almost exactly 1:1.
+
+  Changed to `ref readonly BvhNode node = ref nodes[nodeIndex];`, which removes the copy.
+  (`BvhBuilder`'s traversals already used `ref`; only these two host-side entry points were
+  missed.)
+
+### Notes
+
+- Both changes only affect the host-side query hot path and **do not change any query semantics
+  or results**.
+- The dominant cost of a query is still **how often you call it**: the number of nodes a single
+  query visits depends on how much of the world its box covers, so callers that fire one query
+  per entity per frame should stagger them and budget them.
+
 ## [1.0.11] — rectangle gizmo is a real rectangle again (bowtie -> four-sided ring)
 
 ### Fixed

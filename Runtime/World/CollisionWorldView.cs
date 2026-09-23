@@ -652,27 +652,35 @@ namespace Ember.Collision
         /// </summary>
         public unsafe bool OverlapAabb(in Aabb queryBounds, uint belongsToMask, ref NativeList<Entity> results)
         {
-            if (!IsQueryReady) return false;
-            int bodyCount = State.BodyCount;
+            // State 是「按值拷贝的单例快照」，每个属性访问都会重新解析一次
+            // （World.GetComponent + 整结构体拷贝），NativePointer 还要再取一次 buffer。
+            // 一次 LBVH 查询要用近十个这样的属性，解析开销会盖过遍历本身，因此只解析一次。
+            CollisionWorld state = State;
+            if (state.QueryReady == 0) return false;
+            int bodyCount = state.BodyCount;
             if (bodyCount <= 0 || queryBounds.IsEmpty) return true;
-            int initialResultCount = results.Length;
 
-            var nodes = (BvhNode*)BvhNodePtr;
-            var order = (int*)SortedOrderPtr;
-            var entities = (Entity*)BodyEntityPtr;
-            var filters = (CollisionFilter*)BodyFilterPtr;
-            var flags = (byte*)BodyFlagPtr;
-            var stack = (int*)TraversalStackPtr;
+            var nodes = (BvhNode*)NativePointer<BvhNode>(state.BvhNodes, state.NodeCapacity);
+            var order = (int*)NativePointer<int>(
+                state.SortResultInScratch != 0 ? state.BodyOrderScratch : state.BodyOrder, bodyCount);
+            var entities = (Entity*)NativePointer<Entity>(state.BodyEntities, bodyCount);
+            var filters = (CollisionFilter*)NativePointer<CollisionFilter>(state.BodyFilters, bodyCount);
+            var flags = (byte*)NativePointer<byte>(state.BodyFlags, bodyCount);
+            var stack = (int*)NativePointer<int>(
+                state.TraversalStack, state.ThreadCapacity * TraversalStackDepth);
             if (nodes == null || order == null || stack == null) return false;
 
+            int initialResultCount = results.Length;
             int stackCapacity = TraversalStackDepth;
-            int root = BvhBuilder.RootIndex(LeafCapacity);
+            int root = BvhBuilder.RootIndex(state.LeafCapacity);
             int sp = 0;
             stack[sp++] = root;
             while (sp > 0)
             {
                 int nodeIndex = stack[--sp];
-                BvhNode node = nodes[nodeIndex];
+                // ref readonly：BvhNode 是 48 字节，按值读会被降级成 memcpy；
+                // 每次查询要访问数百个节点，这份拷贝在 profiler 里非常显眼。
+                ref readonly BvhNode node = ref nodes[nodeIndex];
                 if (!Aabb.Overlaps(node.Bounds, queryBounds)) continue;
 
                 if (node.Right < 0)
@@ -704,8 +712,11 @@ namespace Ember.Collision
             out CollisionRaycastHit hit)
         {
             hit = default;
-            int bodyCount = State.BodyCount;
-            if (!IsQueryReady || bodyCount <= 0 || maxDistance < 0f) return false;
+            // 同上：一次性解析状态与全部裸指针。
+            CollisionWorld state = State;
+            if (state.QueryReady == 0) return false;
+            int bodyCount = state.BodyCount;
+            if (bodyCount <= 0 || maxDistance < 0f) return false;
             float directionLengthSq = math.lengthsq(direction);
             if (directionLengthSq <= 1e-12f) return false;
 
@@ -716,17 +727,19 @@ namespace Ember.Collision
                 Min = math.min(origin, end),
                 Max = math.max(origin, end),
             };
-            var nodes = (BvhNode*)BvhNodePtr;
-            var order = (int*)SortedOrderPtr;
-            var bounds = (Aabb*)BodyBoundsPtr;
-            var entities = (Entity*)BodyEntityPtr;
-            var filters = (CollisionFilter*)BodyFilterPtr;
-            var flags = (byte*)BodyFlagPtr;
-            var stack = (int*)TraversalStackPtr;
+            var nodes = (BvhNode*)NativePointer<BvhNode>(state.BvhNodes, state.NodeCapacity);
+            var order = (int*)NativePointer<int>(
+                state.SortResultInScratch != 0 ? state.BodyOrderScratch : state.BodyOrder, bodyCount);
+            var bounds = (Aabb*)NativePointer<Aabb>(state.BodyBounds, bodyCount);
+            var entities = (Entity*)NativePointer<Entity>(state.BodyEntities, bodyCount);
+            var filters = (CollisionFilter*)NativePointer<CollisionFilter>(state.BodyFilters, bodyCount);
+            var flags = (byte*)NativePointer<byte>(state.BodyFlags, bodyCount);
+            var stack = (int*)NativePointer<int>(
+                state.TraversalStack, state.ThreadCapacity * TraversalStackDepth);
             if (nodes == null || order == null || stack == null) return false;
 
             int stackCapacity = TraversalStackDepth;
-            int root = BvhBuilder.RootIndex(LeafCapacity);
+            int root = BvhBuilder.RootIndex(state.LeafCapacity);
             int sp = 0;
             float nearest = maxDistance;
             bool found = false;
@@ -734,7 +747,7 @@ namespace Ember.Collision
             while (sp > 0)
             {
                 int nodeIndex = stack[--sp];
-                BvhNode node = nodes[nodeIndex];
+                ref readonly BvhNode node = ref nodes[nodeIndex];
                 if (!Aabb.Overlaps(node.Bounds, segmentBounds)) continue;
 
                 if (node.Right < 0)
