@@ -19,7 +19,9 @@ namespace Ember.Collision.Editor
     public static class CollisionGizmoDrawer
     {
         private static readonly Color ShapeColor = new(0.4f, 0.85f, 1f, 0.9f);
+        private static readonly Color ContactShapeColor = new(1f, 0.24f, 0.2f, 1f);
         private static readonly Color PairColor = new(1f, 1f, 1f, 0.18f);
+        private static readonly Color ContactPairColor = new(1f, 0.32f, 0.26f, 0.95f);
         private static readonly Color ContactColor = new(1f, 0.4f, 0.3f, 1f);
         private static readonly Color NormalColor = new(1f, 0.9f, 0.2f, 1f);
 
@@ -58,10 +60,24 @@ namespace Ember.Collision.Editor
             var colliders = (Collider*)collision.BodyCollidersPtr;
             if (poses == null || colliders == null) return;
 
+            // 本帧接触标志：非 0 的体画红色（与实体上 CollisionState.HasContact 同源）。
+            byte* contactFlags = null;
+            if (CollisionDebugSettings.HighlightContacts)
+                contactFlags = (byte*)collision.BodyContactFlagsPtr;
+
             int limit = math.min(bodyCount, CollisionDebugSettings.DrawLimit);
+            // 体按 Morton 排序，接触标志在数组里成簸出现；
+            // 按「状态变化才换色」遍历，能把 Handles.color 切换压到接近簇数。
+            bool touching = false;
             Handles.color = ShapeColor;
 
             for (int i = 0; i < limit; i++) {
+                bool nowTouching = contactFlags != null && contactFlags[i] != 0;
+                if (nowTouching != touching) {
+                    touching = nowTouching;
+                    Handles.color = touching ? ContactShapeColor : ShapeColor;
+                }
+
                 DrawShape(collision, in poses[i], in colliders[i]);
             }
         }
@@ -223,8 +239,14 @@ namespace Ember.Collision.Editor
             var poses = (BodyPose*)collision.BodyPosesPtr;
             if (pairs == null || poses == null) return;
 
+            // 每个候选 pair 的流形数：> 0 表示这是窄相确认的真实接触，画红。
+            int* contactCounts = null;
+            if (CollisionDebugSettings.HighlightContacts)
+                contactCounts = (int*)collision.PairContactCountPtr;
+
             int bodyCount = collision.BodyCount;
             int limit = math.min(pairCount, CollisionDebugSettings.DrawLimit);
+            bool touching = false;
             Handles.color = PairColor;
 
             for (int i = 0; i < limit; i++) {
@@ -234,6 +256,13 @@ namespace Ember.Collision.Editor
                 float3 posA = poses[pair.BodyA].Position;
                 float3 posB = poses[pair.BodyB].Position;
                 if (!IsFinite(posA) || !IsFinite(posB)) continue;
+
+                bool nowTouching = contactCounts != null && contactCounts[i] > 0;
+                if (nowTouching != touching) {
+                    touching = nowTouching;
+                    Handles.color = touching ? ContactPairColor : PairColor;
+                }
+
                 Handles.DrawLine(ToVector3(posA), ToVector3(posB));
             }
         }

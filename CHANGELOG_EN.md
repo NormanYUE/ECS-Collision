@@ -4,6 +4,38 @@ All notable changes to Ember Collision.
 
 [中文](CHANGELOG.md)
 
+## [1.0.8] — Contact highlight: draw colliding bodies and pairs in red
+
+### Added
+
+- **Scene-view contact highlight**: new toggle "contact highlight (bodies / pairs in red)"
+  (on by default).
+
+  When enabled, `CollisionGizmoDrawer` draws bodies that **actually have a contact this frame**
+  in red, and draws **narrow-phase-confirmed candidate pairs** in red as well. Pairs that were
+  only broad-phase candidates and never truly intersected stay faint white, and non-contacting
+  bodies stay cyan. Contact points (red spheres) and normals (yellow lines) are unchanged.
+
+  Red therefore means "the contact the solver actually got", so you can see at a glance how many
+  candidates the broad phase produced versus how many survived the narrow phase.
+
+- Two new public read-only accessors on `CollisionWorldView` (for the Editor and runtime baking):
+
+  | Accessor | Contents |
+  | --- | --- |
+  | `BodyContactFlagsPtr` | one byte of per-body contact flag for the frame; same source as `CollisionState.HasContact` on the entity, and unaffected by `MaxContacts` truncation |
+  | `PairContactCountPtr` | manifold count per candidate pair (indices match `CandidatePairPtr`) |
+
+  Both buffers previously only had internal accessors, so the Editor could not reach them.
+
+### Changed
+
+- The debug window now reports a "contacting bodies this frame" count that matches the red
+  highlights, making it easy to cross-check.
+- Colour switching is now "only on state change": bodies are Morton-sorted so contact flags appear
+  in clusters, which keeps `Handles.color` switches near the number of clusters rather than the
+  number of bodies.
+
 ## [1.0.7] — Fix unassigned job capacity fields in the Unity host path
 
 ### Fixed

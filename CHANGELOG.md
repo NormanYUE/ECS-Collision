@@ -4,6 +4,33 @@ All notable changes to Ember Collision.
 
 [English](CHANGELOG_EN.md)
 
+## [1.0.8] — 接触高亮：发生碰撞的碰撞体与候选对画红
+
+### Added
+
+- **场景视图接触高亮**：新增开关「接触高亮（发生碰撞的体 / pair 画红）」（默认开）。
+
+  开启后 `CollisionGizmoDrawer` 会把本帧**真正发生接触**的碰撞体画成红色，
+  并把**窄相确认的候选 pair** 连线画成红色；仅宽相候选、实际并未相交的 pair 保持淡白。
+  红色 = 求解实际拿到的接触，因此可以一眼看出「宽相给了多少候选、窄相留下了多少」。
+
+  只宽相候选、无接触的体仍为青色；接触点（红球）与法线（黄线）图层不变。
+
+- `CollisionWorldView` 新增两个公开只读访问器（供 Editor 与运行时烘焙消费）：
+
+  | 访问器 | 内容 |
+  | --- | --- |
+  | `BodyContactFlagsPtr` | 每体 1 字节的当帧接触标志，与实体上 `CollisionState.HasContact` 同源，且不受 `MaxContacts` 截断影响 |
+  | `PairContactCountPtr` | 每个候选 pair 的流形数（下标与 `CandidatePairPtr` 一一对应） |
+
+  原先这两个 buffer 只有 internal 访问器，编辑器侧取不到。
+
+### Changed
+
+- 调试窗口新增「本帧接触体」计数，与红色高亮的数量对应，便于校验。
+- 绘制颜色切换按「状态变化才换色」处理：体按 Morton 排序后接触标志成簸出现，
+  因此 `Handles.color` 的切换次数接近接触簇数，而不是体数。
+
 ## [1.0.7] — 修复 Unity 宿主调度路径的 Job 容量字段漏赋值
 
 ### Fixed

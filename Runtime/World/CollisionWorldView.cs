@@ -116,6 +116,23 @@ namespace Ember.Collision
             }
         }
 
+        /// <summary>
+        /// 当帧稠密 body 的<b>接触标志</b>（每体 1 字节，非 0 = 本帧至少参与一个真实接触）。
+        /// 由窄相的 flag mark 阶段写入，与实体上的 <c>CollisionState.HasContact</c> 同源，
+        /// 且**不受 <c>CollisionConfig.MaxContacts</c> 截断影响**（截断只影响已发布的流形）。
+        /// 长度 = <see cref="BodyCount"/>。有效性约束同 <see cref="BodyPoses"/>。
+        ///
+        /// 供调试可视化 / 运行时烘焙使用：可以直接据此把「正在碰撞」的碰撞体高亮出来。
+        /// </summary>
+        public readonly long BodyContactFlagsPtr
+        {
+            get
+            {
+                RequireQueryReady(nameof(BodyContactFlagsPtr));
+                return NativePointer<byte>(State.BodyContactFlags, State.BodyCount);
+            }
+        }
+
         /// <summary>凸形状顶点池的只读视图（Polygon2D 顶点存储，长度 <see cref="VertexPoolCount"/>）。有效性约束同 <see cref="BodyPoses"/>。</summary>
         public readonly long VertexPoolPtr
         {
@@ -593,6 +610,16 @@ namespace Ember.Collision
         /// <summary>候选 pair 数组。</summary>
         public readonly long CandidatePairPtr =>
             NativePointer<CandidatePair>(State.CandidatePairs, State.PairCapacity);
+
+        /// <summary>
+        /// 每个候选 pair 产生的流形数（下标与 <see cref="CandidatePairPtr"/> 一一对应，
+        /// 0 = 该候选对被窄相过滤或形状并未真正相交）。长度 = <see cref="PairCapacity"/>。
+        /// 有效性约束同 <see cref="CandidatePairPtr"/>。
+        ///
+        /// 供调试可视化区分「宽相候选 pair」与「窄相确认的接触 pair」。
+        /// </summary>
+        public readonly long PairContactCountPtr =>
+            NativePointer<int>(State.ContactCounts, math.max(1, State.PairCapacity));
 
         /// <summary>每 pair 流形计数。</summary>
         internal readonly long ContactCountPtr =>

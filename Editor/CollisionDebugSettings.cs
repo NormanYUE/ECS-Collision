@@ -62,6 +62,19 @@ namespace Ember.Collision.Editor
         }
 
         /// <summary>
+        /// 把本帧<b>真正发生接触</b>的碰撞体与候选 pair 高亮为红色。
+        ///
+        /// 判定来自窄相的接触标志：碰撞体读 <c>BodyContactFlagsPtr</c>，
+        /// pair 读 <c>PairContactCountPtr</c>。因此红色 = 「求解实际拿到的接触」，
+        /// 而不是「宽相给出的候选」。
+        /// </summary>
+        public static bool HighlightContacts
+        {
+            get => EditorPrefs.GetBool(Prefix + "HighlightContacts", true);
+            set { EditorPrefs.SetBool(Prefix + "HighlightContacts", value); Repaint(); }
+        }
+
+        /// <summary>
         /// 当前运行的 ECS 管理器。碰撞世界只存在于运行中的世界里，
         /// 因此没有业务侧注册时退回框架的 <see cref="ECSManager.Active"/>。
         /// </summary>

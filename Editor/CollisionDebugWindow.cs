@@ -48,6 +48,8 @@ namespace Ember.Collision.Editor
                 "宽相候选 pair 连线", CollisionDebugSettings.DrawPairs);
             CollisionDebugSettings.DrawContacts = EditorGUILayout.ToggleLeft(
                 "接触点与法线", CollisionDebugSettings.DrawContacts);
+            CollisionDebugSettings.HighlightContacts = EditorGUILayout.ToggleLeft(
+                "接触高亮（发生碰撞的体 / pair 画红）", CollisionDebugSettings.HighlightContacts);
 
             EditorGUILayout.Space(4f);
             CollisionDebugSettings.DrawLimit = EditorGUILayout.IntField(
@@ -86,6 +88,7 @@ namespace Ember.Collision.Editor
             EditorGUILayout.Space(4f);
             EditorGUILayout.LabelField("候选 pair", $"{collision.CandidatePairCount} / 容量 {collision.PairCapacity}");
             EditorGUILayout.LabelField("接触流形", $"{collision.ContactCount} / 容量 {collision.ContactCapacity}");
+            EditorGUILayout.LabelField("本帧接触体", CountContactBodies(collision).ToString());
             EditorGUILayout.LabelField("检出接触", collision.DetectedContactCount.ToString());
             EditorGUILayout.LabelField("上一帧 pair", collision.PreviousContactPairCount.ToString());
             EditorGUILayout.LabelField("接触事件", collision.ContactEventCount.ToString());
@@ -96,6 +99,22 @@ namespace Ember.Collision.Editor
                     "部分碰撞被丢弃。调大对应容量或降低密度。",
                     MessageType.Warning);
             }
+        }
+
+        private static unsafe int CountContactBodies(in CollisionWorldView collision)
+        {
+            int bodyCount = collision.BodyCount;
+            if (bodyCount <= 0) return 0;
+
+            var flags = (byte*)collision.BodyContactFlagsPtr;
+            if (flags == null) return 0;
+
+            int count = 0;
+            for (int i = 0; i < bodyCount; i++) {
+                if (flags[i] != 0) count++;
+            }
+
+            return count;
         }
     }
 }
