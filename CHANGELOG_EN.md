@@ -4,6 +4,34 @@ All notable changes to Ember Collision.
 
 [中文](CHANGELOG.md)
 
+## [1.0.9] — Gizmo shape accuracy fixes (scale / double transform / tangent rotation)
+
+### Fixed
+
+- **Gizmo sizes were wrong: shape drawing ignored `BodyPose.Scale`.**
+
+  The narrow phase solves with `Params * Pose.Scale`, but the shape drawing used the raw
+  parameters. In scenes that express collider size through a uniform `LocalToWorld` scale
+  (for example ECS Framework Samples Sample12), the drawn circle / box / capsule was visibly
+  larger than the real collider, so the debug view disagreed with the shape actually being
+  solved.
+
+  Shapes are now scaled by `Pose.Scale`: the radius of `Circle` / `Sphere`, the half extents of
+  `Box2D` / `Box`, and the radius plus segment half-height of `Capsule2D` / `Capsule`.
+  `Polygon2D` goes through `TransformPoint`, which already applies the scale, so it was
+  unaffected. Note that `TransformPoint` applies scale while `TransformDirection` does not, so
+  every scaling site is written out explicitly.
+
+- **`Box2D` gizmo double-transformed its position.**
+
+  The corner calculation pushed an already-computed world centre through
+  `Pose.TransformPoint` (local -> world) a second time, so 2D boxes on entities away from the
+  origin were drawn in a completely wrong place. Only the local corner offsets are rotated and
+  scaled now, then translated to the world centre.
+
+- **`Capsule2D` outer tangents did not rotate with the pose**, so they were drawn skewed under
+  non-zero rotation; the side vector now goes through `Pose.Rotation` as well.
+
 ## [1.0.8] — Contact highlight: draw colliding bodies and pairs in red
 
 ### Added

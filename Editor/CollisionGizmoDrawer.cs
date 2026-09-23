@@ -92,46 +92,55 @@ namespace Ember.Collision.Editor
                 || !float.IsFinite(parameters.Radius) || !float.IsFinite(parameters.HalfHeight)
                 || !IsFinite(parameters.CapsuleAxis)) return;
 
+            // Collider 参数存的是「本地单位尺寸」，真正大小由 LocalToWorld 解出的等比缩放给出
+            // （窄相同样按 Params * Pose.Scale 求解）。不乘就会在带缩放的场景里画出
+            // 比真实碰撞体更大的形状——注意 pose.TransformPoint 已经带缩放，
+            // 而 TransformDirection 不带，所以下面每处缩放都显式写出。
+            float scale = float.IsFinite(pose.Scale) && pose.Scale > 0f ? pose.Scale : 1f;
+
             switch (collider.Type) {
                 case ShapeType.Circle:
-                    Handles.DrawWireDisc(ToVector3(center), Vector3.forward, parameters.Radius);
+                    Handles.DrawWireDisc(ToVector3(center), Vector3.forward, parameters.Radius * scale);
                     break;
 
                 case ShapeType.Box2D:
-                    DrawBox2D(pose, center, parameters.Extents);
+                    DrawBox2D(pose, center, parameters.Extents, scale);
                     break;
 
                 case ShapeType.Capsule2D:
-                    DrawCapsule(pose, center, parameters);
+                    DrawCapsule(pose, center, parameters, scale);
                     break;
 
                 case ShapeType.Polygon2D:
+                    // 顶点池存的是本地单位顶点，TransformPoint 已含缩放，无需显式乘。
                     DrawPolygon(collision, pose, center, parameters);
                     break;
 
                 case ShapeType.Sphere:
-                    Handles.DrawWireDisc(ToVector3(center), Vector3.forward, parameters.Radius);
-                    Handles.DrawWireDisc(ToVector3(center), Vector3.up, parameters.Radius);
-                    Handles.DrawWireDisc(ToVector3(center), Vector3.right, parameters.Radius);
+                    Handles.DrawWireDisc(ToVector3(center), Vector3.forward, parameters.Radius * scale);
+                    Handles.DrawWireDisc(ToVector3(center), Vector3.up, parameters.Radius * scale);
+                    Handles.DrawWireDisc(ToVector3(center), Vector3.right, parameters.Radius * scale);
                     break;
 
                 case ShapeType.Box:
-                    DrawBox3D(pose, center, parameters.Extents);
+                    DrawBox3D(pose, center, parameters.Extents, scale);
                     break;
 
                 case ShapeType.Capsule:
-                    DrawCapsule3D(pose, center, parameters);
+                    DrawCapsule3D(pose, center, parameters, scale);
                     break;
             }
         }
 
-        private static void DrawBox2D(in BodyPose pose, float3 center, float3 extents)
+        private static void DrawBox2D(in BodyPose pose, float3 center, float3 extents, float scale)
         {
+            // center 已经是世界坐标，绝不能再过一次 TransformPoint（那是本地→世界的变换，
+            // 会把它当本地坐标再变换一次，位置完全错掉）。只旋转并缩放四个角偏移量。
             var corners = new Vector3[4];
             for (int i = 0; i < 4; i++) {
                 float sx = (i & 1) == 0 ? -extents.x : extents.x;
                 float sy = (i & 2) == 0 ? -extents.y : extents.y;
-                float3 world = pose.TransformPoint((float3)center + new float3(sx, sy, 0f));
+                float3 world = center + math.mul(pose.Rotation, new float3(sx, sy, 0f) * scale);
                 corners[i] = ToVector3(world);
             }
 
@@ -140,12 +149,12 @@ namespace Ember.Collision.Editor
             }
         }
 
-        private static void DrawBox3D(in BodyPose pose, float3 center, float3 extents)
+        private static void DrawBox3D(in BodyPose pose, float3 center, float3 extents, float scale)
         {
             // 用旋转后的轴向拼 12 条棱：Handles.DrawWireCube 只认轴对齐。
-            float3 axisX = pose.TransformDirection(new float3(extents.x, 0f, 0f));
-            float3 axisY = pose.TransformDirection(new float3(0f, extents.y, 0f));
-            float3 axisZ = pose.TransformDirection(new float3(0f, 0f, extents.z));
+            float3 axisX = pose.TransformDirection(new float3(extents.x, 0f, 0f) * scale);
+            float3 axisY = pose.TransformDirection(new float3(0f, extents.y, 0f) * scale);
+            float3 axisZ = pose.TransformDirection(new float3(0f, 0f, extents.z) * scale);
 
             for (int i = 0; i < 4; i++) {
                 float sx = (i & 1) == 0 ? -1f : 1f;
@@ -157,30 +166,32 @@ namespace Ember.Collision.Editor
             }
         }
 
-        private static void DrawCapsule(in BodyPose pose, float3 center, in ShapeParams parameters)
+        private static void DrawCapsule(in BodyPose pose, float3 center, in ShapeParams parameters, float scale)
         {
+            float radius = parameters.Radius * scale;
             float2 axis = AxisVector2D(parameters.Axis);
-            float3 offset = pose.TransformDirection(new float3(axis.x, axis.y, 0f) * parameters.HalfHeight);
+            float3 offset = pose.TransformDirection(new float3(axis.x, axis.y, 0f) * (parameters.HalfHeight * scale));
             Vector3 a = ToVector3(center - offset);
             Vector3 b = ToVector3(center + offset);
 
-            Handles.DrawWireDisc(a, Vector3.forward, parameters.Radius);
-            Handles.DrawWireDisc(b, Vector3.forward, parameters.Radius);
+            Handles.DrawWireDisc(a, Vector3.forward, radius);
+            Handles.DrawWireDisc(b, Vector3.forward, radius);
 
-            // 两侧外公切线，两点近似即可满足调试辨识。
-            var side = new Vector3(-axis.y, axis.x, 0f) * parameters.Radius;
-            Handles.DrawLine(a + side, b + side);
-            Handles.DrawLine(a - side, b - side);
+            // 两侧外公切线：侧向量同样要过 pose 的旋转，否则非零旋转时切线画歪。
+            float3 side = math.mul(pose.Rotation, new float3(-axis.y, axis.x, 0f)) * radius;
+            Handles.DrawLine(a + ToVector3(side), b + ToVector3(side));
+            Handles.DrawLine(a - ToVector3(side), b - ToVector3(side));
         }
 
-        private static void DrawCapsule3D(in BodyPose pose, float3 center, in ShapeParams parameters)
+        private static void DrawCapsule3D(in BodyPose pose, float3 center, in ShapeParams parameters, float scale)
         {
+            float radius = parameters.Radius * scale;
             float3 axis = parameters.CapsuleAxis;
-            float3 offset = pose.TransformDirection(axis * parameters.HalfHeight);
-            Handles.DrawWireDisc(ToVector3(center - offset), axis, parameters.Radius);
-            Handles.DrawWireDisc(ToVector3(center + offset), axis, parameters.Radius);
+            float3 offset = pose.TransformDirection(axis * (parameters.HalfHeight * scale));
+            Handles.DrawWireDisc(ToVector3(center - offset), axis, radius);
+            Handles.DrawWireDisc(ToVector3(center + offset), axis, radius);
 
-            float3 side = math.mul(pose.Rotation, math.normalizesafe(math.cross(axis, new float3(0f, 0f, 1f)), new float3(1f, 0f, 0f))) * parameters.Radius;
+            float3 side = math.mul(pose.Rotation, math.normalizesafe(math.cross(axis, new float3(0f, 0f, 1f)), new float3(1f, 0f, 0f))) * radius;
             Handles.DrawLine(ToVector3(center - offset + side), ToVector3(center + offset + side));
             Handles.DrawLine(ToVector3(center - offset - side), ToVector3(center + offset - side));
         }

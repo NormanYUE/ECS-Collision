@@ -4,6 +4,31 @@ All notable changes to Ember Collision.
 
 [English](CHANGELOG_EN.md)
 
+## [1.0.9] — Gizmo 形状精度修复（缩放 / 双重变换 / 切线旋转）
+
+### Fixed
+
+- **Gizmo 尺寸错位：形状绘制忽略了 `BodyPose.Scale`。**
+
+  窄相是按 `Params * Pose.Scale` 求解的，而形状绘制直接用原始参数，
+  因此在用等比缩放表达碰撞体大小的场景里（例如 Samples Sample12），
+  Gizmo 画出的圆 / 盒 / 胶囊比真实碰撞体大一截——调试时看到的形状与
+  实际参与求解的形状不是一个大小。
+
+  现在各形状按 `Pose.Scale` 缩放：`Circle` / `Sphere` 半径、`Box2D` / `Box`
+  半范围、`Capsule2D` / `Capsule` 的半径与线段半长。
+  `Polygon2D` 走 `TransformPoint`（本就含缩放），未受影响。
+  注意 `TransformPoint` 带缩放而 `TransformDirection` 不带，因此每处缩放都显式写出。
+
+- **`Box2D` Gizmo 位置双重变换。**
+
+  四角计算把已经算好的世界中心又过了一次 `Pose.TransformPoint`（本地→世界），
+  于是非原点实体的 2D 盒会画到完全错误的位置。现在只在本地角偏移上做
+  旋转 + 缩放，再平移到世界中心。
+
+- **`Capsule2D` 外公切线未随 pose 旋转**，非零旋转时切线画歪；
+  侧向量现在同样过 `Pose.Rotation`。
+
 ## [1.0.8] — 接触高亮：发生碰撞的碰撞体与候选对画红
 
 ### Added
