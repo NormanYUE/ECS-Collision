@@ -4,6 +4,36 @@ All notable changes to Ember Collision.
 
 [中文](CHANGELOG.md)
 
+## [1.0.7] — Fix unassigned job capacity fields in the Unity host path
+
+### Fixed
+
+- **Capacity fields on the broadphase / narrowphase / contact-event jobs were never
+  assigned, so the whole collision pipeline failed closed under Unity.**
+
+  All of the fields below are boundary-check limits used inside the jobs, but the
+  schedulers (`CollisionBroadphaseSystem` / `CollisionNarrowphaseSystem` /
+  `CollisionContactEventSystem`) never set them, leaving them at 0 so that every job
+  bailed out at its first guard:
+
+  | Job | Unassigned field | Effect |
+  | --- | --- | --- |
+  | `PairCollectJob` | `PairCapacity` | every leaf computed `limit = 0 - offset <= 0` → all leaves wrote the -1 sentinel → `DiagPairCapacityTruncated` → fail-closed published **0 candidate pairs** |
+  | `ContactCountJob` | `PairCapacity` | `pairIndex >= PairCapacity` returned immediately → **0 contact manifolds** |
+  | `ContactCollectJob` | `PairCapacity`, `ContactCapacity` | same, manifold collection never ran |
+  | `ContactFlagMarkJob` | `PairCapacity` | `limit` clamped to 0 → `CollisionState` never set |
+  | `ContactPairGatherJob` | `OutputCapacity` | `output >= OutputCapacity` returned immediately → **no Enter / Stay / Exit events** |
+
+  All six fields are now assigned from the real `CollisionWorldView` capacities
+  (`PairCapacity` / `ContactCapacity` / `ContactPairCapacity`).
+
+  The pure CLI tests only cover raw-pointer logic such as `BvhBuilder` /
+  `NarrowphaseMath`, not the scheduling wiring, which is why this went unnoticed.
+  It was found by actually running a Unity host sample (ECS Framework Samples,
+  Sample12 "2D collision brawl", 300 units plus bullets): after the fix the frame
+  produces candidate pairs, contact manifolds, contact events and kills, with all
+  diagnostic slots reading 0.
+
 ## [1.0.6] — Scene gizmo anti-corruption fix
 
 ### Fixed

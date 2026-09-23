@@ -4,6 +4,33 @@ All notable changes to Ember Collision.
 
 [English](CHANGELOG_EN.md)
 
+## [1.0.7] — 修复 Unity 宿主调度路径的 Job 容量字段漏赋值
+
+### Fixed
+
+- **宽相 / 窄相 / 接触事件的 Job 容量字段从未赋值，导致 Unity 下整条碰撞管线 fail-closed。**
+
+  以下字段都是 Job 内部用于边界检查的容量上限，但调度侧（`CollisionBroadphaseSystem` /
+  `CollisionNarrowphaseSystem` / `CollisionContactEventSystem`）从未给它们赋值，
+  默认 0，于是每个 Job 都在第一道检查处提前返回：
+
+  | Job | 漏赋值字段 | 后果 |
+  | --- | --- | --- |
+  | `PairCollectJob` | `PairCapacity` | 每个 leaf 都判 `limit = 0 - offset <= 0` → 全部写 -1 哨兵 → `DiagPairCapacityTruncated` → fail-closed 发布 **0 个候选 pair** |
+  | `ContactCountJob` | `PairCapacity` | `pairIndex >= PairCapacity` 直接 return → **0 个接触流形** |
+  | `ContactCollectJob` | `PairCapacity`, `ContactCapacity` | 同上，流形收集同样空转 |
+  | `ContactFlagMarkJob` | `PairCapacity` | `limit` 被夹到 0 → `CollisionState` 永不置位 |
+  | `ContactPairGatherJob` | `OutputCapacity` | `output >= OutputCapacity` 直接 return → **无 Enter / Stay / Exit 事件** |
+
+  这 6 个字段现已全部按 `CollisionWorldView` 的实际容量赋值
+  （`PairCapacity` / `ContactCapacity` / `ContactPairCapacity`）。
+
+  纯 CLI 单测只覆盖 `BvhBuilder` / `NarrowphaseMath` / `BvhBuilder.CountHierarchyOverlaps`
+  等裸指针纯逻辑，调度接线不在其覆盖范围内，因此该缺陷此前未被发现。
+  本次由 Unity 宿主示例（ECS Framework Samples 的 Sample12「2D 碰撞大混战」，
+  300 单位 + 子弹）实际运行暴露并修复：修复后每帧候选 pair / 接触流形 / 接触事件 / 击杀
+  均正常产出，诊断槽全为 0。
+
 ## [1.0.6] — 场景 Gizmos 防花屏
 
 ### Fixed

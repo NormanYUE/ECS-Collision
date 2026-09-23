@@ -384,6 +384,7 @@ namespace Ember.Collision
                 Root = BvhBuilder.RootIndex(leafCapacity),
                 BodyCount = bodyCount,
                 StackDepth = CollisionWorldView.TraversalStackDepth,
+                PairCapacity = m_View.PairCapacity,
             }.Schedule(bodyCount, 64, default);
         }
 

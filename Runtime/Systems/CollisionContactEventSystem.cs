@@ -28,6 +28,7 @@ namespace Ember.Collision
                     ContactOffsetsPtr = view.ContactOffsetPtr,
                     OutputPtr = view.CurrentContactPairPtr,
                     BodyCount = view.BodyCount,
+                    OutputCapacity = view.ContactPairCapacity,
                 }.Schedule(view.CandidatePairCount, 64).Complete();
 
                 new ContactPairSortJob

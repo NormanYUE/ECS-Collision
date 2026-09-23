@@ -117,6 +117,7 @@ namespace Ember.Collision
                 ContactCountsPtr = view.ContactCountPtr,
                 BodyCount = view.BodyCount,
                 VertexCount = view.VertexCount,
+                PairCapacity = view.PairCapacity,
                 Dimension = config.Dimension,
                 SkipStaticPairs = config.SkipStaticPairs,
             }.Schedule(pairCount, 64, dependency);
@@ -166,6 +167,8 @@ namespace Ember.Collision
                 BodyCount = view.BodyCount,
                 VertexCount = view.VertexCount,
                 OutputLimit = outputLimit,
+                PairCapacity = view.PairCapacity,
+                ContactCapacity = view.ContactCapacity,
                 Dimension = config.Dimension,
                 SkipStaticPairs = config.SkipStaticPairs,
             }.Schedule(pairCount, 64, default);
@@ -180,6 +183,7 @@ namespace Ember.Collision
                 BodyContactFlagsPtr = view.BodyContactFlagPtr,
                 PairCount = pairCount,
                 BodyCount = view.BodyCount,
+                PairCapacity = view.PairCapacity,
             }.Schedule();
         }
 
