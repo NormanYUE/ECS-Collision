@@ -61,11 +61,9 @@ namespace Ember.Collision
 
             int offset = PairOffsets[leafIndex];
             int limit = PairCapacity - offset;
-            if (limit <= 0)
-            {
-                PairCounts[leafIndex] = -1;
-                return;
-            }
+            // 容量不够时该叶一个 pair 也不写。调用方用「精确总数 > 容量」判定截断并扩容补跑，
+            // 所以这里**刻意不写哨兵**：哨兵会把 expected 计数覆盖掉，补跑时就拿不到正确的数量了。
+            if (limit <= 0) return;
 
             if (limit > expected) limit = expected;
 
@@ -85,8 +83,8 @@ namespace Ember.Collision
                     offset, limit,
                     BodyFlags, ParticipationBits);
 
-                if (result.Overflow)
-                    PairCounts[leafIndex] = -1;
+                // 遍历栈溢出只可能出现在计数趟（同一套遍历、同一栈深），
+                // 且已由 PairCountNormalizeJob 汇总为 DiagPairStackOverflow；这里不再写哨兵。
             }
         }
     }

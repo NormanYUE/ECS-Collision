@@ -4,6 +4,45 @@ All notable changes to Ember Collision.
 
 [中文](CHANGELOG.md)
 
+## [1.0.14] — pipeline sync removal: one main-thread wait per phase
+
+### Performance
+
+- **Broad phase: "count + prefix sum" and "write candidate pairs" are now one dependency chain with a
+  single `.Complete()` per frame.**
+
+  The old flow stopped after count / prefix sum, read the exact pair count, grew capacity from it,
+  and only then scheduled the pair write - a fixed extra main-thread drain every frame. Capacity is
+  now **predicted from last frame's pair count (x2)** (`m_PredictedPairs`) and the whole chain is
+  scheduled at once; if the prediction falls short, capacity is grown to the exact total and the
+  collect is re-run once.
+
+- **The re-run's completeness criterion is "exact total <= capacity", with no sentinel.**
+
+  Each entry of the prefix sum is exactly how many pairs that leaf has to write, so a sufficient
+  capacity always fills completely. `PairCollectJob` used to write a `-1` sentinel when truncated,
+  but `CollectPairDiagnostics` clears those sentinels, and a sentinel overwrites the `expected`
+  count the re-run needs - so the sentinel and the re-run scheme are mutually exclusive. The
+  sentinel is gone.
+
+- **Narrow phase: same treatment.** Capacity is predicted from last frame's manifold count
+  (`m_PredictedContacts`) and "clear flags -> count/prefix sum -> write manifolds -> mark contact
+  bits -> write back CollisionState" is scheduled as one chain. Truncation only affects the
+  collect (flag marking reads the untruncated count stream, the state write-back reads the flags),
+  so the re-run only repeats the collect, which always succeeds in one attempt.
+
+- Steady-state main-thread `.Complete()` calls per frame: **8 -> 3** - the broad-phase chain tail,
+  the narrow-phase state write-back, and the contact-event gather->sort. The latter two are forced
+  by framework constraint #2 (`SystemBase.OnTick` has no JobHandle return channel, so self-scheduled
+  jobs must be completed inside OnTick) and cannot be removed without changing the framework.
+
+### Fixed
+
+- **The narrow phase could publish more manifolds than were actually written.** When the predicted
+  capacity exceeded the real manifold count, `outputLimit` was larger than the number written, so
+  `TryGetContacts` would hand back a stale tail. The published count is now clamped to
+  `min(exact manifolds, MaxContacts)`.
+
 ## [1.0.13] — wide-phase pre-filter for inactive bodies + fewer main-thread stalls
 
 ### Added

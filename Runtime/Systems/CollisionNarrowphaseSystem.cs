@@ -17,6 +17,14 @@ namespace Ember.Collision
         // 早于 ECSManager.Start()、早于 World 构造，而 ComponentMask.With<T>() 会当场读组件注册表。
         private EntityQuery m_DisabledStateQuery;
 
+        /// <summary>
+        /// 上帧发布的接触流形数（容量预测）。
+        ///
+        /// 有这个预测才能把「计数/前缀和」与「写入流形」排进同一条依赖链、只在末尾等一次：
+        /// 预测够用就一遍过，不够时按精确数量扩容补跑一次收集。
+        /// </summary>
+        private int m_PredictedContacts = 1024;
+
         /// <summary>最近一帧发布的接触流形数，便于诊断和宿主侧测试。</summary>
         public int LastContactCount { get; private set; }
 
@@ -64,36 +72,49 @@ namespace Ember.Collision
                 : CollisionConfig.Default;
             int scanBlocks = BlockScan.BlockCount(pairCount, CollisionWorldView.ScanBlockSize);
 
-            // Count and scan must finish before exact contact capacity can grow buffers.
-            ScheduleContactCounts(view, config, pairCount, clearFlags)
-                .Complete();
+            // 按上帧流形数预测接触容量：预测够用时整条窄相链只需**一次**主线程停等。
+            // 旧实现先跑到计数/前缀和就停下、读精确流形数扩容，才敢排收集。
+            int predicted = math.max(16, m_PredictedContacts);
+            view.EnsureContactCapacity(predicted);
+            int outputLimit = math.min(predicted, math.max(0, config.MaxContacts));
 
+            // ---------- 一次排完：清除标志 → 计数/前缀和 → 写入流形 → 标记接触位 → 写回 CollisionState ----------
+            JobHandle counts = ScheduleContactCounts(view, config, pairCount, clearFlags);
+            JobHandle flags = outputLimit > 0
+                ? JobHandle.CombineDependencies(
+                    ScheduleContactFlagMark(view, pairCount, counts),
+                    ScheduleContactCollect(view, config, pairCount, outputLimit, counts))
+                : ScheduleContactFlagMark(view, pairCount, counts);
+
+            ScheduleStateWrite(view, flags, view.ChunkCount).Complete();
+
+            // 读出精确流形数（计数趟不受输出容量影响）。
             var scanTotals = (int*)view.ContactScanBlockPtr;
             int exactCount = scanTotals != null ? math.max(0, scanTotals[scanBlocks]) : 0;
-            int outputLimit = math.min(exactCount, math.max(0, config.MaxContacts));
-            view.EnsureContactCapacity(outputLimit);
-            view.SetDetectedContactCount(exactCount);
+            int wanted = math.min(exactCount, math.max(0, config.MaxContacts));
 
+            // 预测容量不足时补跑一次收集。
+            // flag mark 用的是未截断的计数流、状态写回用的是 flag，两者都不受流形截断影响，
+            // 所以补跑只重做收集这一步；扩容后容量 == wanted，一次必然成功。
+            if (wanted > outputLimit)
+            {
+                view.EnsureContactCapacity(wanted);
+                ScheduleContactCollect(view, config, pairCount, wanted, default).Complete();
+            }
+
+            // 发布数量必须等于**实际写入**的数量：
+            // wanted = min(精确流形数, MaxContacts)，而预测容量可能比它大，
+            // 若不夹回来，TryGetContacts 会按预测值返回一截陈旧尾部。
+            outputLimit = wanted;
+
+            view.SetDetectedContactCount(exactCount);
             if (exactCount > outputLimit)
             {
                 var truncFlags = (int*)view.DiagnosticFlagPtr;
                 truncFlags[CollisionWorld.DiagContactCapacityTruncated] = 1;
             }
 
-            JobHandle flags;
-            if (outputLimit > 0)
-            {
-                JobHandle collect = ScheduleContactCollect(view, config, pairCount, outputLimit);
-                flags = JobHandle.CombineDependencies(ScheduleContactFlagMark(view, pairCount), collect);
-            }
-            else
-            {
-                flags = ScheduleContactFlagMark(view, pairCount);
-            }
-
-            // 状态写回本来就依赖 flag mark 的结果（ScheduleStateWrite 的首参就是依赖）。
-            // 之前传 default 再额外 .Complete() 一次，等于把已经能串起来的流水线切断停等。
-            ScheduleStateWrite(view, flags, view.ChunkCount).Complete();
+            m_PredictedContacts = math.max(16, outputLimit * 2);
             AdvanceDisabledStates(ctx);
 
             LastContactCount = outputLimit;
@@ -153,7 +174,8 @@ namespace Ember.Collision
             in CollisionWorldView view,
             in CollisionConfig config,
             int pairCount,
-            int outputLimit)
+            int outputLimit,
+            JobHandle dependency)
         {
             return new ContactCollectJob
             {
@@ -174,10 +196,10 @@ namespace Ember.Collision
                 ContactCapacity = view.ContactCapacity,
                 Dimension = config.Dimension,
                 SkipStaticPairs = config.SkipStaticPairs,
-            }.Schedule(pairCount, 64, default);
+            }.Schedule(pairCount, 64, dependency);
         }
 
-        private static JobHandle ScheduleContactFlagMark(in CollisionWorldView view, int pairCount)
+        private static JobHandle ScheduleContactFlagMark(in CollisionWorldView view, int pairCount, JobHandle dependency)
         {
             return new ContactFlagMarkJob
             {
@@ -187,7 +209,7 @@ namespace Ember.Collision
                 PairCount = pairCount,
                 BodyCount = view.BodyCount,
                 PairCapacity = view.PairCapacity,
-            }.Schedule();
+            }.Schedule(dependency);
         }
 
         private static JobHandle ScheduleStateWrite(in CollisionWorldView view, JobHandle dependency, int chunkCount)

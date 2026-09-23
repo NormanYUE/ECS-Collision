@@ -112,15 +112,20 @@ namespace Ember.Collision
                 return;
             }
 
+            // 按上帧 pair 数预测容量：预测够用时整条链只需**一次**主线程停等。
             m_View.EnsureCapacity(bodyCount, chunks.Count, m_PredictedPairs, InitialContactCapacity);
 
             int leafCapacity = m_View.LeafCapacity;
             int scanBlocks = BlockScan.BlockCount(bodyCount, CollisionWorldView.ScanBlockSize);
 
-            // ---------- 阶段 A：宽相全链路（含 pair 计数与前缀和）----------
-            ScheduleBroadphase(config, bodyCount, leafCapacity, chunks.Count).Complete();
+            // ---------- 一次性排完整条链：采集 → 归约 → 排序 → BVH → pair 计数 → 前缀和 → 写入 pair ----------
+            // 这里只 .Complete() 一次；旧实现把「计数/前缀和」与「写入 pair」拆成两段、
+            // 中间停下读精确 pair 数再扩容，等于每帧多排空一次主线程。
+            JobHandle chain = ScheduleBroadphase(config, bodyCount, leafCapacity, chunks.Count);
+            chain = SchedulePairCollect(config, bodyCount, leafCapacity, chain);
+            chain.Complete();
 
-            // 同步①：读出精确 pair 数（前缀和的总数落在块基址数组末位）。
+            // 读出精确 pair 数。计数趟只写 PairCounts[bodyCount]，不受输出容量影响，所以始终精确。
             var pairScanBlocks = (int*)m_View.PairScanBlockPtr;
             var diagnostics = (int*)m_View.DiagnosticFlagPtr;
             bool countOverflow = diagnostics != null
@@ -128,17 +133,19 @@ namespace Ember.Collision
             int pairCount = !countOverflow && pairScanBlocks != null ? pairScanBlocks[scanBlocks] : 0;
             if (pairCount < 0) pairCount = 0;
 
-            m_View.EnsurePairDependentCapacity(pairCount, InitialContactCapacity);
-            m_PredictedPairs = math.max(MinPredictedPairs, pairCount * 2);
-
-            // ---------- 阶段 B：按精确容量写入 pair ----------
-            if (pairCount > 0)
+            // 预测容量不足时补跑一次：按精确总数扩容后重跑收集。
+            //
+            // 完整性判据就是「精确总数 <= 容量」：前缀和每一项就是该叶要写的数量，
+            // 容量足够时收集必然写满，不需要哨兵（哨兵反而会破坏补跑所需的 expected）。
+            // 扩容后容量恰好等于精确总数，所以补跑一次必然成功，不存在循环重试。
+            if (pairCount > m_View.PairCapacity)
             {
-                SchedulePairCollect(config, bodyCount, leafCapacity).Complete();
-                if (CollectPairDiagnostics(bodyCount))
-                    pairCount = 0; // 收集不完整时绝不发布包含陈旧尾部的 partial pair stream。
+                m_View.EnsurePairDependentCapacity(pairCount, InitialContactCapacity);
+                SchedulePairCollect(config, bodyCount, leafCapacity, default).Complete();
             }
 
+            m_View.EnsurePairDependentCapacity(pairCount, InitialContactCapacity);
+            m_PredictedPairs = math.max(MinPredictedPairs, pairCount * 2);
             LastPairCount = pairCount;
             m_View.SetFrameResults(pairCount, 0, 0);
             m_View.AccumulateDiagnostics();
@@ -376,7 +383,8 @@ namespace Ember.Collision
         }
 
         /// <summary>按精确容量写入候选 pair（每叶一次，写区间由前缀和保证互不重叠）。</summary>
-        private JobHandle SchedulePairCollect(in CollisionConfig config, int bodyCount, int leafCapacity)
+        private JobHandle SchedulePairCollect(
+            in CollisionConfig config, int bodyCount, int leafCapacity, JobHandle dependency)
         {
             return new PairCollectJob
             {
@@ -397,27 +405,10 @@ namespace Ember.Collision
                 ParticipationBits = config.SkipInactivePairs
                     ? (byte)(CollisionBody.EnabledBit | CollisionBody.ActiveBit)
                     : (byte)0,
-            }.Schedule(bodyCount, 64, default);
+            }.Schedule(bodyCount, 64, dependency);
         }
 
         /// <summary>汇总收集阶段的 leaf 哨兵；返回 true 时调用方必须 fail closed。</summary>
-        private unsafe bool CollectPairDiagnostics(int bodyCount)
-        {
-            var pairCounts = (int*)m_View.PairCountPtr;
-            bool truncated = false;
-            for (int leafIndex = 0; leafIndex < bodyCount; leafIndex++)
-            {
-                if (pairCounts[leafIndex] >= 0) continue;
-                pairCounts[leafIndex] = 0;
-                truncated = true;
-            }
-
-            if (!truncated) return false;
-            var diagFlags = (int*)m_View.DiagnosticFlagPtr;
-            diagFlags[CollisionWorld.DiagPairCapacityTruncated] = 1;
-            return true;
-        }
-
         /// <summary>
         /// 诊断汇总告警。溢出意味着当帧<b>静默丢失</b>了 pair 或接触——
         /// 这类问题在运行时表现为「偶发穿模」，必须显式暴露而非容忍。
@@ -437,8 +428,7 @@ namespace Ember.Collision
             if (diagnostics[CollisionWorld.DiagPairCapacityTruncated] != 0)
             {
                 Debug.LogError(
-                    "[Ember.Collision] 候选 pair 容量不足：当帧 pair 被截断。" +
-                    "这不应发生（容量由精确计数得出），请上报此情形。");
+                    "[Ember.Collision] 候选 pair 在扩容补跑后仍不完整：应由容量之外的原因引起，请上报此情形。");
             }
         }
     }
