@@ -26,11 +26,17 @@ namespace Ember.Collision
 
         [NativeDisableUnsafePtrRestriction] public long PairCountsPtr;
 
+        /// <summary>稠密 body 标志位（含 Enabled / Active 位）；配合 <see cref="SkipInactive"/> 过滤未参与体。</summary>
+        [NativeDisableUnsafePtrRestriction] public long BodyFlagsPtr;
+
         [NativeSetThreadIndex] public int ThreadIndex;
 
         public int Root;
         public int BodyCount;
         public int StackDepth;
+
+        /// <summary>是否跳过未参与碰撞的体（判定用 <see cref="ParticipationBits"/>）。传 0 位即不过滤。</summary>
+        public byte ParticipationBits;
 
         public unsafe void Execute(int leafIndex)
         {
@@ -39,6 +45,7 @@ namespace Ember.Collision
             var SortedOrder = (int*)SortedOrderPtr;
             var TraversalStack = (int*)TraversalStackPtr;
             var PairCounts = (int*)PairCountsPtr;
+            var BodyFlags = (byte*)BodyFlagsPtr;
             if (leafIndex >= BodyCount) return;
 
             unsafe
@@ -46,10 +53,13 @@ namespace Ember.Collision
                 int stackOffset = ThreadIndex * StackDepth;
                 int* stack = (int*)TraversalStack + stackOffset;
                 int body = SortedOrder[leafIndex];
+
                 Aabb bounds = BodyBounds[body];
 
+                // 自身 / 对手的参与位过滤都在 BvhBuilder 里（单一事实来源，CLI 可测）。
                 var result = BvhBuilder.CountHierarchyOverlaps(
-                    (BvhNode*)Nodes, Root, leafIndex, &bounds, stack, StackDepth);
+                    (BvhNode*)Nodes, Root, leafIndex, &bounds, stack, StackDepth,
+                    SortedOrder, BodyFlags, ParticipationBits);
 
                 if (result.Overflow)
                 {

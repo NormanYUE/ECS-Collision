@@ -20,7 +20,7 @@ namespace Ember.Collision
 
             if (currentCount > 0)
             {
-                new ContactPairGatherJob
+                JobHandle gather = new ContactPairGatherJob
                 {
                     PairsPtr = view.CandidatePairPtr,
                     BodyEntitiesPtr = view.BodyEntityPtr,
@@ -29,14 +29,16 @@ namespace Ember.Collision
                     OutputPtr = view.CurrentContactPairPtr,
                     BodyCount = view.BodyCount,
                     OutputCapacity = view.ContactPairCapacity,
-                }.Schedule(view.CandidatePairCount, 64).Complete();
+                }.Schedule(view.CandidatePairCount, 64);
 
+                // 链成一条依赖后只 Complete 一次：排序本来就要等收集完，
+                // 原来两次独立的 .Complete() 等于中间多排空一次主线程。
                 new ContactPairSortJob
                 {
                     RecordsPtr = view.CurrentContactPairPtr,
                     ScratchPtr = view.ContactPairScratchPtr,
                     Count = currentCount,
-                }.Schedule().Complete();
+                }.Schedule(gather).Complete();
             }
 
             var previous = (ContactPairRecord*)view.PreviousContactPairPtr;

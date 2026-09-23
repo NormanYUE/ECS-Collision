@@ -4,6 +4,40 @@ All notable changes to Ember Collision.
 
 [中文](CHANGELOG.md)
 
+## [1.0.13] — wide-phase pre-filter for inactive bodies + fewer main-thread stalls
+
+### Added
+
+- **`CollisionConfig.SkipInactivePairs` (on by default): the broad phase no longer produces
+  candidate pairs for bodies that take no part in collision.**
+
+  The test uses the **exact same bits as the narrow phase `IsPairEligible`**
+  (`CollisionBody.EnabledBit | ActiveBit`), so the semantics and results are unchanged - those
+  pairs were always going to be discarded, this just stops doing the work.
+
+  The filter is implemented as **optional parameters** on `BvhBuilder.CountHierarchyOverlaps` /
+  `CollectPairsInto` (`bodyFlags` / `participationBits`; omit them and nothing is filtered).
+  Both the self side and the candidate side are checked, so any pair with an inactive endpoint is
+  dropped. Because the logic lives in the pure functions, the CLI tests can diff it against a
+  brute-force oracle directly.
+
+  Measured (Samples Sample12, 1000 units): **37% of bodies are inactive and 60.3% of candidate
+  pairs had an inactive endpoint** - that traversal, counting and scattering is now skipped.
+
+### Performance
+
+- **Removed 3 unnecessary main-thread drains (`.Complete()`)** that could have been dependency-
+  chained into a single wait.
+
+  | Site | Before | After |
+  | --- | --- | --- |
+  | `CollisionContactEventSystem` | Complete after gathering pairs, Complete again after sorting | gather -> sort as one dependency, waited once |
+  | `CollisionNarrowphaseSystem` | flag mark / contact collect each Complete, then a separate state writeback + Complete | all three chained, waited once |
+
+  `.Complete()` call sites across the systems dropped from 9 to 6. The two that remain are the real
+  capacity-decision syncs (read the exact pair count / exact manifold count); removing those needs
+  the P5 "predict from last frame + re-run on overflow" scheme.
+
 ## [1.0.12] — query hot path: resolve the singleton once, zero-copy node reads
 
 ### Performance

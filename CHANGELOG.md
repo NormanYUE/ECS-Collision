@@ -4,6 +4,34 @@ All notable changes to Ember Collision.
 
 [English](CHANGELOG_EN.md)
 
+## [1.0.13] — 宽相预筛未参与体 + 减少主线程停等
+
+### Added
+
+- **`CollisionConfig.SkipInactivePairs`（默认开）：宽相不再为「未参与碰撞」的体生成候选 pair。**
+
+  判定用的是 **与窄相 `IsPairEligible` 完全相同的那组位**（`CollisionBody.EnabledBit | ActiveBit`），
+  因此语义与结果完全不变，只是不再白做：这类 pair 必然被窄相丢掉。
+
+  过滤在 `BvhBuilder.CountHierarchyOverlaps` / `CollectPairsInto` 里以**可选参数**形式实现
+  （`bodyFlags` / `participationBits`，不传即不过滤），两个入口的自身侧与对手侧都会检查，
+  所以「任一端未参与」的 pair 一律不产出。因为逻辑落在纯函数里，CLI 单测能直接对拍。
+
+  实测效果（Samples Sample12，1000 单位）：**37% 的 body 是未参与体，而 60.3% 的候选 pair
+  带未参与端点** —— 这部分遍历、计数与散布现在都省掉了。
+
+### Performance
+
+- **去掉 3 处多余的主线程排空（`.Complete()`）**：它们本可以依赖链起来一次等。
+
+  | 位置 | 之前 | 现在 |
+  | --- | --- | --- |
+  | `CollisionContactEventSystem` | 收集 pair 后 Complete 一次，排序后再 Complete 一次 | 收集 → 排序链成一条依赖，只等一次 |
+  | `CollisionNarrowphaseSystem` | flag mark / contact collect 各自 Complete，再单独跑状态写回并 Complete | 三者链成一条依赖，只等一次 |
+
+  单系统 `.Complete()` 调用点从 9 处降到 6 处。剩下的两个是真正的容量决策同步点
+  （读精确 pair 数 / 精确流形数），属于 P5 的「按上帧数量预测 + 溢出重跑」才能消掉的那类。
+
 ## [1.0.12] — 查询热路径优化：单例只解析一次 + 节点零拷贝
 
 ### Performance

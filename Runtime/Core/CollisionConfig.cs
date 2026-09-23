@@ -46,6 +46,16 @@ namespace Ember.Collision
         /// <summary>启用静态体互相跳过（海量静态场景的关键优化）。</summary>
         public bool SkipStaticPairs;
 
+        /// <summary>
+        /// 宽相生成候选 pair 时跳过「未参与碰撞」的体（Enabled / Active 位不全，
+        /// 例如已休眠 / 待重生的单位）。
+        ///
+        /// 这些 pair 无论如何都会被窄相 <c>IsPairEligible</c> 丢掉，提前跳过只是省掉
+        /// 白做的遍历、计数与散布。判定用的是**与窄相完全相同的那组位**，
+        /// 因此不改变任何接触结果（包括 <c>CollisionState</c> 的边沿），只是少做无用功。
+        /// </summary>
+        public bool SkipInactivePairs;
+
         /// <summary>内置默认值：3D、四叉/八叉范围 ±1000、跳过静态-静态。</summary>
         public static CollisionConfig Default => new()
         {
@@ -62,6 +72,7 @@ namespace Ember.Collision
             SleepLinearThreshold = 0.01f,
             SleepTimeThreshold = 0.5f,
             SkipStaticPairs = true,
+            SkipInactivePairs = true,
         };
     }
 }

@@ -80,17 +80,20 @@ namespace Ember.Collision
                 truncFlags[CollisionWorld.DiagContactCapacityTruncated] = 1;
             }
 
+            JobHandle flags;
             if (outputLimit > 0)
             {
                 JobHandle collect = ScheduleContactCollect(view, config, pairCount, outputLimit);
-                JobHandle.CombineDependencies(ScheduleContactFlagMark(view, pairCount), collect).Complete();
+                flags = JobHandle.CombineDependencies(ScheduleContactFlagMark(view, pairCount), collect);
             }
             else
             {
-                ScheduleContactFlagMark(view, pairCount).Complete();
+                flags = ScheduleContactFlagMark(view, pairCount);
             }
 
-            ScheduleStateWrite(view, default, view.ChunkCount).Complete();
+            // 状态写回本来就依赖 flag mark 的结果（ScheduleStateWrite 的首参就是依赖）。
+            // 之前传 default 再额外 .Complete() 一次，等于把已经能串起来的流水线切断停等。
+            ScheduleStateWrite(view, flags, view.ChunkCount).Complete();
             AdvanceDisabledStates(ctx);
 
             LastContactCount = outputLimit;

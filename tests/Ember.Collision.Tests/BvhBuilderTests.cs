@@ -71,7 +71,8 @@ namespace Ember.Collision.Tests
         /// 返回排序后的 (a,b) 列表（a &lt; b，稠密 body 下标）。
         /// </summary>
         private static List<(int A, int B)> CollectBvhPairs(
-            BvhNode* nodes, Aabb* bounds, int* order, int* stack, int count, int root, int leafCapacity)
+            BvhNode* nodes, Aabb* bounds, int* order, int* stack, int count, int root, int leafCapacity,
+            byte* bodyFlags = null, byte participationBits = 0)
         {
             var pairs = new List<(int, int)>();
             var hitStore = new CandidatePair[leafCapacity];
@@ -83,7 +84,8 @@ namespace Ember.Collision.Tests
                     int body = order[i];
                     var result = BvhBuilder.CollectPairsInto(
                         nodes, root, i, &bounds[body], stack, StackDepth, order,
-                        hits, 0, leafCapacity);
+                        hits, 0, leafCapacity,
+                        bodyFlags, participationBits);
 
                     Assert.That(result.Overflow, Is.False, "遍历栈溢出或输出容量不足");
 
@@ -123,6 +125,80 @@ namespace Ember.Collision.Tests
                 Assert.That(pair.Item1, Is.LessThan(pair.Item2), $"{context}: pair {pair} 未归一化为 A<B");
                 Assert.That(expectedSet.Contains(pair), Is.True, $"{context}: 多出 pair {pair}（会导致重复施加冲量）");
             }
+        }
+
+        [TestCase(2)]
+        [TestCase(17)]
+        [TestCase(64)]
+        [TestCase(100)]
+        public void PairFilter_ExcludesInactiveBodies(int count)
+        {
+            // 宽相预筛（SkipInactivePairs）：带未参与端点的 pair 一律不产出。
+            // 判定必须与窄相 IsPairEligible 一致 —— 用「两端都参与的暴力集合」对拍。
+            const byte participation = 0x06; // Enabled | Active
+            var positions = new float3[MaxCount];
+            var flagsStore = new byte[MaxCount];
+            for (int i = 0; i < count; i++)
+            {
+                // 确定性密集栅格（间距 0.5，半径 1）：保证重叠，测试不会空跑。
+                positions[i] = new float3((i % 10) * 0.5f, (i / 10) * 0.5f, 0f);
+                // 每 3 个停用 1 个（下标 2/5/8…）；下标 0/1 始终参与，保证 count=2 也有 pair。
+                flagsStore[i] = (byte)(i % 3 == 2 ? 0 : participation);
+            }
+
+            WithTree(count, (nodes, bounds, order, scratch, stack, leafCapacity, root) =>
+            {
+                for (int i = 0; i < count; i++)
+                    bounds[i] = Aabb.FromCenterExtents(positions[i], new float3(1f));
+
+                BvhBuilder.BuildLeaves(nodes, bounds, order, count, leafCapacity);
+                int levelStart = 0, levelCount = leafCapacity, parentStart = leafCapacity;
+                while (levelCount > 1)
+                {
+                    int parentCount = levelCount >> 1;
+                    BvhBuilder.MergeLevel(nodes, levelStart, levelCount, parentStart);
+                    levelStart = parentStart;
+                    levelCount = parentCount;
+                    parentStart += parentCount;
+                }
+
+                fixed (byte* flags = flagsStore)
+                {
+                    var filtered = CollectBvhPairs(
+                        nodes, bounds, order, stack, count, levelStart, leafCapacity, flags, participation);
+                    var unfiltered = CollectBvhPairs(
+                        nodes, bounds, order, stack, count, levelStart, leafCapacity);
+                    var bruteAll = CollectBruteForcePairs(bounds, count);
+
+                    var expected = new List<(int, int)>();
+                    for (int i = 0; i < count; i++)
+                    {
+                        if ((flagsStore[i] & participation) != participation) continue;
+                        for (int j = i + 1; j < count; j++)
+                        {
+                            if ((flagsStore[j] & participation) != participation) continue;
+                            if (Aabb.Overlaps(bounds[i], bounds[j])) expected.Add((i, j));
+                        }
+                    }
+
+                    AssertPairSetsEqual(filtered, expected,
+                        $"count={count} 参与位过滤 (bvhAll={unfiltered.Count} bvhFiltered={filtered.Count} bruteAll={bruteAll.Count} bruteFiltered={expected.Count})");
+                    Assert.That(filtered.Count, Is.GreaterThan(0), "样本应至少产出一个 pair，否则测试无意义");
+
+                    // 计数遍历与收集遍历共用同一套过滤，总数必须一致
+                    int total = 0;
+                    for (int i = 0; i < count; i++)
+                    {
+                        var r = BvhBuilder.CountHierarchyOverlaps(
+                            nodes, levelStart, i, &bounds[order[i]], stack, StackDepth,
+                            order, flags, participation);
+                        Assert.That(r.Overflow, Is.False);
+                        total += r.Count;
+                    }
+
+                    Assert.That(total, Is.EqualTo(filtered.Count), "过滤后的计数遍历与收集遍历必须一致");
+                }
+            });
         }
 
         private static void RunRandomScene(int count, int seed, float spacing, float radius)

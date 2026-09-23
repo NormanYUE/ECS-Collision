@@ -31,12 +31,18 @@ namespace Ember.Collision
 
         [NativeDisableUnsafePtrRestriction] public long PairsPtr;
 
+        /// <summary>稠密 body 标志位（含 Enabled / Active 位）；配合 <see cref="SkipInactive"/> 过滤未参与体。</summary>
+        [NativeDisableUnsafePtrRestriction] public long BodyFlagsPtr;
+
         [NativeSetThreadIndex] public int ThreadIndex;
 
         public int Root;
         public int BodyCount;
         public int StackDepth;
         public int PairCapacity;
+
+        /// <summary>参与位（Enabled | Active）。传 0 即不过滤未参与体。</summary>
+        public byte ParticipationBits;
 
         public unsafe void Execute(int leafIndex)
         {
@@ -47,6 +53,7 @@ namespace Ember.Collision
             var TraversalStack = (int*)TraversalStackPtr;
             var Pairs = (CandidatePair*)PairsPtr;
             var PairCounts = (int*)PairCountsPtr;
+            var BodyFlags = (byte*)BodyFlagsPtr;
             if (leafIndex >= BodyCount) return;
 
             int expected = PairCounts[leafIndex];
@@ -75,7 +82,8 @@ namespace Ember.Collision
                     stack, StackDepth,
                     (int*)SortedOrder,
                     (CandidatePair*)Pairs,
-                    offset, limit);
+                    offset, limit,
+                    BodyFlags, ParticipationBits);
 
                 if (result.Overflow)
                     PairCounts[leafIndex] = -1;

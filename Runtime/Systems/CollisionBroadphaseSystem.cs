@@ -134,7 +134,7 @@ namespace Ember.Collision
             // ---------- 阶段 B：按精确容量写入 pair ----------
             if (pairCount > 0)
             {
-                SchedulePairCollect(bodyCount, leafCapacity).Complete();
+                SchedulePairCollect(config, bodyCount, leafCapacity).Complete();
                 if (CollectPairDiagnostics(bodyCount))
                     pairCount = 0; // 收集不完整时绝不发布包含陈旧尾部的 partial pair stream。
             }
@@ -235,9 +235,15 @@ namespace Ember.Collision
                 SortedOrderPtr = m_View.SortedOrderPtr,
                 TraversalStackPtr = m_View.TraversalStackPtr,
                 PairCountsPtr = m_View.PairCountPtr,
+                BodyFlagsPtr = m_View.BodyFlagPtr,
                 Root = BvhBuilder.RootIndex(leafCapacity),
                 BodyCount = bodyCount,
                 StackDepth = CollisionWorldView.TraversalStackDepth,
+                // 参与位 = Enabled | Active（与窄相 IsPairEligible 同源）；
+                // 关闭该策略时传 0，即不做任何过滤。
+                ParticipationBits = config.SkipInactivePairs
+                    ? (byte)(CollisionBody.EnabledBit | CollisionBody.ActiveBit)
+                    : (byte)0,
             }.Schedule(bodyCount, 64, handle);
 
             handle = new PairCountNormalizeJob
@@ -370,7 +376,7 @@ namespace Ember.Collision
         }
 
         /// <summary>按精确容量写入候选 pair（每叶一次，写区间由前缀和保证互不重叠）。</summary>
-        private JobHandle SchedulePairCollect(int bodyCount, int leafCapacity)
+        private JobHandle SchedulePairCollect(in CollisionConfig config, int bodyCount, int leafCapacity)
         {
             return new PairCollectJob
             {
@@ -381,10 +387,16 @@ namespace Ember.Collision
                 PairCountsPtr = m_View.PairCountPtr,
                 TraversalStackPtr = m_View.TraversalStackPtr,
                 PairsPtr = m_View.CandidatePairPtr,
+                BodyFlagsPtr = m_View.BodyFlagPtr,
                 Root = BvhBuilder.RootIndex(leafCapacity),
                 BodyCount = bodyCount,
                 StackDepth = CollisionWorldView.TraversalStackDepth,
                 PairCapacity = m_View.PairCapacity,
+                // 参与位 = Enabled | Active（与窄相 IsPairEligible 同源）；
+                // 关闭该策略时传 0，即不做任何过滤。
+                ParticipationBits = config.SkipInactivePairs
+                    ? (byte)(CollisionBody.EnabledBit | CollisionBody.ActiveBit)
+                    : (byte)0,
             }.Schedule(bodyCount, 64, default);
         }
 

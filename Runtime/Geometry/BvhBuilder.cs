@@ -155,8 +155,15 @@ namespace Ember.Collision
             int leafIndex,
             Aabb* queryBounds,
             int* stack,
-            int stackCapacity)
+            int stackCapacity,
+            int* sortedOrder = null,
+            byte* bodyFlags = null,
+            byte participationBits = 0)
         {
+            // 自身未参与就不产出任何 pair（对手侧在叶分支里判）。
+            if (!IsParticipating(bodyFlags, sortedOrder, leafIndex, participationBits))
+                return new TraversalResult(0, false);
+
             int count = 0;
             int sp = 0;
             stack[sp++] = root;
@@ -174,6 +181,8 @@ namespace Ember.Collision
                 if (n.Right < 0)
                 {
                     // 能走到这里说明 n.MaxLeaf > leafIndex，且包围盒相交。
+                    // 对手未参与碰撞就不算数（它反正会被窄相丢掉）。
+                    if (!IsParticipating(bodyFlags, sortedOrder, n.MaxLeaf, participationBits)) continue;
                     count++;
                     continue;
                 }
@@ -187,6 +196,19 @@ namespace Ember.Collision
 
             return new TraversalResult(count, false);
         }
+
+        /// <summary>
+        /// 候选对手（或自身）是否参与碰撞。
+        ///
+        /// <paramref name="bodyFlags"/> 为空（未开启过滤）时恒为 true，
+        /// 因此未传该参数的调用方（含全部 CLI 单测）行为完全不变。
+        /// 判定位与窄相 <c>NarrowphaseMath.IsPairEligible</c> 用的是同一组位：
+        /// 只有两侧都参与，pair 才可能被窄相接受；任一侧未参与就必然被丢掉。
+        /// </summary>
+        private static unsafe bool IsParticipating(
+            byte* bodyFlags, int* sortedOrder, int leaf, byte participationBits) =>
+            bodyFlags == null || sortedOrder == null
+            || (bodyFlags[sortedOrder[leaf]] & participationBits) == participationBits;
 
         /// <summary>
         /// 与 <see cref="CountHierarchyOverlaps"/> 同一次遍历，但把命中的叶直接写成
@@ -206,8 +228,14 @@ namespace Ember.Collision
             int* sortedOrder,
             CandidatePair* output,
             int outputOffset,
-            int outputLimit)
+            int outputLimit,
+            byte* bodyFlags = null,
+            byte participationBits = 0)
         {
+            // 自身未参与就不产出任何 pair（对手侧在叶分支里判）。
+            if (!IsParticipating(bodyFlags, sortedOrder, leafIndex, participationBits))
+                return new TraversalResult(0, false);
+
             int count = 0;
             int sp = 0;
             stack[sp++] = root;
@@ -223,6 +251,7 @@ namespace Ember.Collision
 
                 if (n.Right < 0)
                 {
+                    if (!IsParticipating(bodyFlags, sortedOrder, n.MaxLeaf, participationBits)) continue;
                     if (count >= outputLimit)
                         return new TraversalResult(count, true);
 
