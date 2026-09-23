@@ -150,16 +150,30 @@ namespace Ember.Collision.Editor
             }
         }
 
+        /// <summary>
+        /// 2D 盒的四个角，<b>按逆时针环绕顺序</b>排列。
+        ///
+        /// 不能用 <c>(i &amp; 1, i &amp; 2)</c> 生成：那给出的是
+        /// <c>(-,-) (+,-) (-,+) (+,+)</c>，连成环就是「左下 → 右下 → 左上 → 右上」，
+        /// 两条对角线会交叉成一个蝴蝶结（看上去像两个三角形拼的漏斗），而不是矩形。
+        /// </summary>
+        private static readonly float2[] BoxCorners2D =
+        {
+            new(-1f, -1f),
+            new(1f, -1f),
+            new(1f, 1f),
+            new(-1f, 1f),
+        };
+
         private static void DrawBox2D(in BodyPose pose, float3 center, float3 extents, float scale)
         {
             // center 已经是世界坐标，绝不能再过一次 TransformPoint（那是本地→世界的变换，
             // 会把它当本地坐标再变换一次，位置完全错掉）。只旋转并缩放四个角偏移量。
             var corners = new Vector3[4];
             for (int i = 0; i < 4; i++) {
-                float sx = (i & 1) == 0 ? -extents.x : extents.x;
-                float sy = (i & 2) == 0 ? -extents.y : extents.y;
-                float3 world = center + math.mul(pose.Rotation, new float3(sx, sy, 0f) * scale);
-                corners[i] = ToVector3(world);
+                float2 sign = BoxCorners2D[i];
+                float3 local = new float3(sign.x * extents.x, sign.y * extents.y, 0f);
+                corners[i] = ToVector3(center + math.mul(pose.Rotation, local * scale));
             }
 
             for (int i = 0; i < 4; i++) {
@@ -174,13 +188,24 @@ namespace Ember.Collision.Editor
             float3 axisY = pose.TransformDirection(new float3(0f, extents.y, 0f) * scale);
             float3 axisZ = pose.TransformDirection(new float3(0f, 0f, extents.z) * scale);
 
-            for (int i = 0; i < 4; i++) {
-                float sx = (i & 1) == 0 ? -1f : 1f;
-                float sy = (i & 2) == 0 ? -1f : 1f;
-                float3 offset = axisX * sx + axisY * sy;
-                Handles.DrawLine(ToVector3(center + offset - axisZ), ToVector3(center + offset + axisZ));
-                Handles.DrawLine(ToVector3(center - axisZ + axisX * sx - axisY), ToVector3(center - axisZ + axisX * sx + axisY));
-                Handles.DrawLine(ToVector3(center - axisZ - axisX + axisY * sy), ToVector3(center - axisZ + axisX + axisY * sy));
+            // 8 个角点，下标位表示 (x, y, z) 的正负。
+            var corners = new Vector3[8];
+            for (int i = 0; i < 8; i++) {
+                float3 offset =
+                    axisX * ((i & 1) == 0 ? -1f : 1f) +
+                    axisY * ((i & 2) == 0 ? -1f : 1f) +
+                    axisZ * ((i & 4) == 0 ? -1f : 1f);
+                corners[i] = ToVector3(center + offset);
+            }
+
+            // 12 条棱 = 所有「只差一个符号位」的角点对，每个组合只画一次。
+            // （旧写法只画了 4 条平行于 Z 的棱 + -Z 面上的 4 条，共 8 条，
+            //  +Z 面上的 4 条一直缺失。）
+            for (int i = 0; i < 8; i++) {
+                for (int bit = 1; bit <= 4; bit <<= 1) {
+                    if ((i & bit) != 0) continue;
+                    Handles.DrawLine(corners[i], corners[i | bit]);
+                }
             }
         }
 

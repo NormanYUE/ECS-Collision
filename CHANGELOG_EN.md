@@ -4,6 +4,29 @@ All notable changes to Ember Collision.
 
 [中文](CHANGELOG.md)
 
+## [1.0.11] — rectangle gizmo is a real rectangle again (bowtie -> four-sided ring)
+
+### Fixed
+
+- **The `Box2D` gizmo was drawn as a bowtie (two triangles forming a funnel) instead of a
+  rectangle.**
+
+  The four corners were generated from `(i & 1, i & 2)`, which yields
+  `(-,-) (+,-) (-,+) (+,+)`. Connecting those in a ring walks
+  "bottom-left -> bottom-right -> top-left -> top-right", so the two diagonals cross and you see
+  two triangles instead of a rectangle.
+
+  The corners are now listed explicitly in counter-clockwise ring order
+  `(-,-) (+,-) (+,+) (-,+)`, so consecutive edges close into a proper rectangle.
+  (1.0.9 only fixed the position of this draw - the world centre was being transformed twice -
+  and never touched the corner ordering.)
+
+- **The 3D `Box` only drew 8 of its 12 edges.**
+
+  The old code drew the 4 edges parallel to Z plus the 4 in-plane edges of the `-Z` face (two of
+  them twice), and never drew the 4 in-plane edges of the `+Z` face. It now iterates the corner
+  pairs that differ in exactly one sign bit, which yields exactly the 12 edges, each once.
+
 ## [1.0.10] — stop drawing bodies that do not participate in collision
 
 ### Fixed
