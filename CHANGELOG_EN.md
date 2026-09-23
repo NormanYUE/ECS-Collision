@@ -4,6 +4,37 @@ All notable changes to Ember Collision.
 
 [中文](CHANGELOG.md)
 
+## [1.0.10] — stop drawing bodies that do not participate in collision
+
+### Fixed
+
+- **The debug view drew bodies that take no part in the current frame's collision, which reads as
+  "it has a collider but never collides".**
+
+  A unit waiting to respawn (the sample calls `CollisionBody.SetActive(false)`) or a disabled body
+  is still in the body pool and still gets inserted into the broad-phase BVH, but the narrow phase
+  `IsPairEligible` filters all of them out via the Enabled / Active bits, so they can never produce
+  a contact.
+
+  `DrawShapes` / `DrawPairs` used to walk the whole body / pair pool with no participation filter,
+  so those bodies left a hollow wireframe behind. The presentation layer hides their sprites,
+  so it looked like a "funnel" floating in the scene (a triangular `Polygon2D` unit looks most
+  like one).
+
+  Non-participating bodies are now skipped by default; the new toggle
+  "draw non-participating bodies (dead / disabled, grey)" draws them in grey.
+
+### Added
+
+- The debug window now reports a "non-participating bodies" count next to "contacting bodies this
+  frame", so you can see at a glance how many bodies are in the pool but not colliding.
+
+### Changed
+
+- The `DrawLimit` budget for shapes and pair lines is now counted in **lines actually drawn**.
+  Previously it counted pool indices, so skipped bodies consumed the budget and fewer items were
+  drawn than configured.
+
 ## [1.0.9] — Gizmo shape accuracy fixes (scale / double transform / tangent rotation)
 
 ### Fixed

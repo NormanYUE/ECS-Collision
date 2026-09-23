@@ -75,6 +75,21 @@ namespace Ember.Collision.Editor
         }
 
         /// <summary>
+        /// 绘制「本帧不参与碰撞」的体（阵亡 / 未启用，即 Enabled/Active 位不全）。
+        ///
+        /// 默认<b>关闭</b>：这些体还在 body 池里（也还在宽相 BVH 里），但窄相
+        /// <c>IsPairEligible</c> 会把它们全部过滤掉，永远不会产生接触。
+        /// 把它们画出来会造成「明明有碰撞体却不撞」的误导。
+        ///
+        /// 打开后以灰色画出，便于确认「它在池里、但没参与」。
+        /// </summary>
+        public static bool DrawInactiveBodies
+        {
+            get => EditorPrefs.GetBool(Prefix + "DrawInactive", false);
+            set { EditorPrefs.SetBool(Prefix + "DrawInactive", value); Repaint(); }
+        }
+
+        /// <summary>
         /// 当前运行的 ECS 管理器。碰撞世界只存在于运行中的世界里，
         /// 因此没有业务侧注册时退回框架的 <see cref="ECSManager.Active"/>。
         /// </summary>

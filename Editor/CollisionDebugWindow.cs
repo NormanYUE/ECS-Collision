@@ -50,6 +50,8 @@ namespace Ember.Collision.Editor
                 "接触点与法线", CollisionDebugSettings.DrawContacts);
             CollisionDebugSettings.HighlightContacts = EditorGUILayout.ToggleLeft(
                 "接触高亮（发生碰撞的体 / pair 画红）", CollisionDebugSettings.HighlightContacts);
+            CollisionDebugSettings.DrawInactiveBodies = EditorGUILayout.ToggleLeft(
+                "绘制未参与碰撞的体（阵亡 / 未启用，灰色）", CollisionDebugSettings.DrawInactiveBodies);
 
             EditorGUILayout.Space(4f);
             CollisionDebugSettings.DrawLimit = EditorGUILayout.IntField(
@@ -89,6 +91,7 @@ namespace Ember.Collision.Editor
             EditorGUILayout.LabelField("候选 pair", $"{collision.CandidatePairCount} / 容量 {collision.PairCapacity}");
             EditorGUILayout.LabelField("接触流形", $"{collision.ContactCount} / 容量 {collision.ContactCapacity}");
             EditorGUILayout.LabelField("本帧接触体", CountContactBodies(collision).ToString());
+            EditorGUILayout.LabelField("未参与碰撞的体", CountInactiveBodies(collision).ToString());
             EditorGUILayout.LabelField("检出接触", collision.DetectedContactCount.ToString());
             EditorGUILayout.LabelField("上一帧 pair", collision.PreviousContactPairCount.ToString());
             EditorGUILayout.LabelField("接触事件", collision.ContactEventCount.ToString());
@@ -112,6 +115,28 @@ namespace Ember.Collision.Editor
             int count = 0;
             for (int i = 0; i < bodyCount; i++) {
                 if (flags[i] != 0) count++;
+            }
+
+            return count;
+        }
+
+        /// <summary>
+        /// 本帧不参与碰撞的体数（Enabled / Active 位不全，例如阵亡待重生、被禁用的体）。
+        /// 它们仍在 body 池与宽相 BVH 里，但窄相 <c>IsPairEligible</c> 会全部过滤掉，
+        /// 永远不会产生接触——场景里看到「有轮廓却不撞」通常就是它们。
+        /// </summary>
+        private static unsafe int CountInactiveBodies(in CollisionWorldView collision)
+        {
+            int bodyCount = collision.BodyCount;
+            if (bodyCount <= 0) return 0;
+
+            var flags = (byte*)collision.BodyFlagsPtr;
+            if (flags == null) return 0;
+
+            const byte participation = CollisionBody.EnabledBit | CollisionBody.ActiveBit;
+            int count = 0;
+            for (int i = 0; i < bodyCount; i++) {
+                if ((flags[i] & participation) != participation) count++;
             }
 
             return count;

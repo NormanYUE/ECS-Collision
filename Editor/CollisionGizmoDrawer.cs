@@ -20,10 +20,15 @@ namespace Ember.Collision.Editor
     {
         private static readonly Color ShapeColor = new(0.4f, 0.85f, 1f, 0.9f);
         private static readonly Color ContactShapeColor = new(1f, 0.24f, 0.2f, 1f);
+        private static readonly Color InactiveShapeColor = new(0.66f, 0.66f, 0.7f, 0.9f);
         private static readonly Color PairColor = new(1f, 1f, 1f, 0.18f);
         private static readonly Color ContactPairColor = new(1f, 0.32f, 0.26f, 0.95f);
+        private static readonly Color InactivePairColor = new(0.55f, 0.55f, 0.6f, 0.12f);
         private static readonly Color ContactColor = new(1f, 0.4f, 0.3f, 1f);
         private static readonly Color NormalColor = new(1f, 0.9f, 0.2f, 1f);
+
+        /// <summary>体参与本帧碰撞所需的位：Enabled + Active。窄相 <c>IsPairEligible</c> 用同一组位。</summary>
+        private const byte ParticipationBits = CollisionBody.EnabledBit | CollisionBody.ActiveBit;
 
         static CollisionGizmoDrawer()
         {
@@ -65,20 +70,33 @@ namespace Ember.Collision.Editor
             if (CollisionDebugSettings.HighlightContacts)
                 contactFlags = (byte*)collision.BodyContactFlagsPtr;
 
-            int limit = math.min(bodyCount, CollisionDebugSettings.DrawLimit);
+            // 参与位：Enabled + Active。缺任一位的体窄相一律过滤，默认不画（见 DrawInactiveBodies）。
+            var bodyFlags = (byte*)collision.BodyFlagsPtr;
+            bool drawInactive = CollisionDebugSettings.DrawInactiveBodies;
+
+            // 预算按「实际画出的体」计，否则被跳过的体会把预算吃掉。
+            int budget = math.max(1, CollisionDebugSettings.DrawLimit);
+            int drawn = 0;
+
             // 体按 Morton 排序，接触标志在数组里成簸出现；
             // 按「状态变化才换色」遍历，能把 Handles.color 切换压到接近簇数。
-            bool touching = false;
+            int state = 0; // 0 = 普通  1 = 接触  2 = 未参与
             Handles.color = ShapeColor;
 
-            for (int i = 0; i < limit; i++) {
-                bool nowTouching = contactFlags != null && contactFlags[i] != 0;
-                if (nowTouching != touching) {
-                    touching = nowTouching;
-                    Handles.color = touching ? ContactShapeColor : ShapeColor;
+            for (int i = 0; i < bodyCount && drawn < budget; i++) {
+                bool participating = bodyFlags != null
+                    && (bodyFlags[i] & ParticipationBits) == ParticipationBits;
+                if (!participating && !drawInactive) continue;
+
+                bool touching = participating && contactFlags != null && contactFlags[i] != 0;
+                int next = !participating ? 2 : (touching ? 1 : 0);
+                if (next != state) {
+                    state = next;
+                    Handles.color = state == 2 ? InactiveShapeColor : (state == 1 ? ContactShapeColor : ShapeColor);
                 }
 
                 DrawShape(collision, in poses[i], in colliders[i]);
+                drawn++;
             }
         }
 
@@ -255,26 +273,38 @@ namespace Ember.Collision.Editor
             if (CollisionDebugSettings.HighlightContacts)
                 contactCounts = (int*)collision.PairContactCountPtr;
 
+            // 宽相会把未参与碰撞的体也编进 BVH，因此这类候选 pair 同样默认不画。
+            var bodyFlags = (byte*)collision.BodyFlagsPtr;
+            bool drawInactive = CollisionDebugSettings.DrawInactiveBodies;
+
             int bodyCount = collision.BodyCount;
-            int limit = math.min(pairCount, CollisionDebugSettings.DrawLimit);
-            bool touching = false;
+            int budget = math.max(1, CollisionDebugSettings.DrawLimit);
+            int drawn = 0;
+            int state = 0; // 0 = 候选  1 = 接触  2 = 未参与
             Handles.color = PairColor;
 
-            for (int i = 0; i < limit; i++) {
+            for (int i = 0; i < pairCount && drawn < budget; i++) {
                 CandidatePair pair = pairs[i];
                 if (pair.BodyA < 0 || pair.BodyB < 0 || pair.BodyA >= bodyCount || pair.BodyB >= bodyCount) continue;
+
+                bool participating = bodyFlags == null
+                    || ((bodyFlags[pair.BodyA] & ParticipationBits) == ParticipationBits
+                        && (bodyFlags[pair.BodyB] & ParticipationBits) == ParticipationBits);
+                if (!participating && !drawInactive) continue;
 
                 float3 posA = poses[pair.BodyA].Position;
                 float3 posB = poses[pair.BodyB].Position;
                 if (!IsFinite(posA) || !IsFinite(posB)) continue;
 
-                bool nowTouching = contactCounts != null && contactCounts[i] > 0;
-                if (nowTouching != touching) {
-                    touching = nowTouching;
-                    Handles.color = touching ? ContactPairColor : PairColor;
+                bool touching = participating && contactCounts != null && contactCounts[i] > 0;
+                int next = !participating ? 2 : (touching ? 1 : 0);
+                if (next != state) {
+                    state = next;
+                    Handles.color = state == 2 ? InactivePairColor : (state == 1 ? ContactPairColor : PairColor);
                 }
 
                 Handles.DrawLine(ToVector3(posA), ToVector3(posB));
+                drawn++;
             }
         }
 
