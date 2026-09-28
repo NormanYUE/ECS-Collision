@@ -4,6 +4,16 @@ All notable changes to Ember Collision.
 
 [中文](CHANGELOG.md)
 
+## [1.0.16] — Dependencies raised to Ember 1.13.2 and Core 2.1.7
+
+### Changed
+
+- `com.ember.ecs` raised from 1.13.0 to 1.13.2, and `com.ember.core` from 2.1.6 to 2.1.7.
+  **No source changes in this package**: framework 1.13.1 / 1.13.2 and Core 2.1.7 are internal
+  fixes and version alignment with an unchanged public API. The bump only keeps the exact versions
+  along the dependency chain consistent — UPM resolves exact versions, so a downstream package
+  asking for 1.13.2 / 2.1.7 must not find this one still declaring 1.13.0 / 2.1.6.
+
 ## [1.0.15] — fix O(n^2) leaf construction in the BVH (3-13x faster broad phase)
 
 ### Fixed

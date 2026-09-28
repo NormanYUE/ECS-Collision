@@ -4,6 +4,15 @@ All notable changes to Ember Collision.
 
 [English](CHANGELOG_EN.md)
 
+## [1.0.16] — 依赖提升至 Ember 1.13.2、Core 2.1.7
+
+### Changed
+
+- 依赖 `com.ember.ecs` 由 1.13.0 提升至 1.13.2，`com.ember.core` 由 2.1.6 提升至 2.1.7。
+  **本包源码未变**：框架 1.13.1 / 1.13.2 与 Core 2.1.7 都是内部修复与版本对齐，公共 API 不变。
+  提升版本只为让依赖链上的精确版本一致 —— UPM 按精确版本解析，下游包要求 1.13.2 / 2.1.7 时
+  本包不能还停在 1.13.0 / 2.1.6。
+
 ## [1.0.15] — 修复 BVH 叶层构建的 O(n²)（宽相 3~13 倍加速）
 
 ### Fixed
