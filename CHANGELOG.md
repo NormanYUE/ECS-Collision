@@ -4,6 +4,19 @@ All notable changes to Ember Collision.
 
 [English](CHANGELOG_EN.md)
 
+## [1.0.17] — 包布局：开发文件移出 Unity 可见范围
+
+### Changed
+
+- **`Ember.Collision.csproj` / `.sln` 移入 `dotnet~/`，`docs/` 改为 `docs~/`。** UPM 走 git 分发
+  没有排除机制，开发文件会随包发出去并被 Unity 当资源导入。`~` 后缀是 Unity 的忽略约定；
+  `docs/` 里是开发设计文档、不是用户手册，所以**不**做成 `Documentation~/`。
+
+- 依赖提升：`com.ember.core` 由 2.1.7 提升至 2.1.8（Core 只改了包布局，公共 API 不变）。
+
+配套：显式 `<Compile Include="../Runtime/**/*.cs" />`（工程移出仓库根后，默认通配只看得到
+`dotnet~/` 自己）。**无 API 变化**，Unity 侧编译行为不变。
+
 ## [1.0.16] — 依赖提升至 Ember 1.13.2、Core 2.1.7
 
 ### Changed

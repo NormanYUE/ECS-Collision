@@ -4,6 +4,23 @@ All notable changes to Ember Collision.
 
 [中文](CHANGELOG.md)
 
+## [1.0.17] — Package layout: development files hidden from Unity
+
+### Changed
+
+- **`Ember.Collision.csproj` / `.sln` moved into `dotnet~/`, and `docs/` became `docs~/`.** Git-based
+  UPM distribution has no exclusion mechanism, so development files ship with the package and get
+  imported by Unity as assets. A trailing `~` is Unity's ignore convention; the contents of `docs/`
+  are development design notes rather than a user manual, so it is deliberately **not**
+  `Documentation~/`.
+
+- Dependency raised: `com.ember.core` from 2.1.7 to 2.1.8 (Core only changed its package layout; the
+  public API is unchanged).
+
+Supporting change: explicit `<Compile Include="../Runtime/**/*.cs" />` (with the project outside the
+repository root, the default glob only sees `dotnet~/` itself). **No API changes** — Unity-side
+compilation is unaffected.
+
 ## [1.0.16] — Dependencies raised to Ember 1.13.2 and Core 2.1.7
 
 ### Changed
